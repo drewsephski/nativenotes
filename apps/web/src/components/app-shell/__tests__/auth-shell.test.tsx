@@ -127,13 +127,44 @@ describe("workspace selector", () => {
 
     const trigger = screen.getByRole("button", { name: "Workspace: Personal" });
     await user.click(trigger);
-    await user.click(await screen.findByRole("menuitem", { name: /NativeNotes Team/i }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: /NativeNotes Team/i }),
+    );
 
     await waitFor(() => {
       expect(mockSetActive).toHaveBeenCalledWith({
         organizationId: "org_2",
       });
     });
+  });
+
+  test("workspace creation closes the menu and exposes a keyboard-accessible dialog", async () => {
+    mockCreate.mockResolvedValue({ data: { id: "org_qa" }, error: null });
+    const user = userEvent.setup();
+    render(<WorkspaceSelector />);
+    await user.click(
+      screen.getByRole("button", { name: "Workspace: Personal" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Create workspace" }),
+    );
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Create workspace" }),
+    ).toBeInTheDocument();
+    await user.type(
+      screen.getByRole("textbox", { name: "Workspace name" }),
+      "Parity QA",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Create", exact: true }),
+    );
+    await waitFor(() =>
+      expect(mockSetActive).toHaveBeenCalledWith({ organizationId: "org_qa" }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
   });
 
   test("a fresh session can select its first workspace", async () => {
@@ -146,7 +177,9 @@ describe("workspace selector", () => {
     const user = userEvent.setup();
     render(<WorkspaceSelector />);
 
-    await user.click(screen.getByRole("button", { name: "Workspace: Select workspace" }));
+    await user.click(
+      screen.getByRole("button", { name: "Workspace: Select workspace" }),
+    );
     await user.click(await screen.findByRole("menuitem", { name: "Personal" }));
 
     await waitFor(() => {
@@ -207,7 +240,9 @@ describe("zero-org onboarding", () => {
       screen.getByRole("textbox", { name: /workspace name/i }),
     ).toHaveValue("Ada's Workspace");
 
-    await user.click(screen.getByRole("button", { name: /^create workspace$/i }));
+    await user.click(
+      screen.getByRole("button", { name: /^create workspace$/i }),
+    );
 
     await waitFor(() => {
       expect(mockCreate).toHaveBeenCalled();

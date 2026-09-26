@@ -130,7 +130,13 @@ export function WorkspaceSelector({ className }: WorkspaceSelectorProps) {
               />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[220px]">
+          <DropdownMenuContent
+            align="start"
+            className="w-[220px]"
+            onCloseAutoFocus={(event) => {
+              if (createOpen) event.preventDefault();
+            }}
+          >
             <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
             {list.map((organization) => {
               const isActive = organization.id === active?.id;
@@ -152,12 +158,7 @@ export function WorkspaceSelector({ className }: WorkspaceSelectorProps) {
               );
             })}
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={(event) => {
-                event.preventDefault();
-                setCreateOpen(true);
-              }}
-            >
+            <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               Create workspace
             </DropdownMenuItem>
