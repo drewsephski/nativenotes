@@ -1,9 +1,10 @@
+import "dotenv/config";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate as runDrizzleMigrate } from "drizzle-orm/postgres-js/migrator";
 import { pathToFileURL } from "node:url";
 import postgres from "postgres";
 
-import { resolveMigrationDatabaseUrl } from "../config/database-url.js";
+import { assertSafeTestDatabaseUrl, resolveMigrationDatabaseUrl } from "../config/database-url.js";
 
 /**
  * Migrations are an explicit CLI/CI action — never run on Vercel request paths.
@@ -26,5 +27,6 @@ const isDirectRun =
   import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isDirectRun) {
+  if (process.env.NODE_ENV === "test") assertSafeTestDatabaseUrl(resolveMigrationDatabaseUrl(process.env));
   await migrate();
 }

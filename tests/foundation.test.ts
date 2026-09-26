@@ -1,3 +1,4 @@
+const noteDefaults = { folderId: null, summary: null, favorited: false, freshness: "current" as const, verifiedAt: null, archivedAt: null, trashedAt: null, purgeAfter: null, createdByUserId: null };
 import { describe, expect, it } from "vitest";
 
 import {
@@ -100,6 +101,7 @@ describe("note.list tenant scope", () => {
         return [
           {
             id: tenantId === "org-a" ? "note-a" : "note-b",
+            ...noteDefaults,
             tenantId,
             title: "Scoped note",
             body: "body",

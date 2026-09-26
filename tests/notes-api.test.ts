@@ -1,3 +1,4 @@
+const noteDefaults = { folderId: null, summary: null, favorited: false, freshness: "current" as const, verifiedAt: null, archivedAt: null, trashedAt: null, purgeAfter: null, createdByUserId: null };
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -142,6 +143,7 @@ describe("createNoteForTenant", () => {
           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
         );
         return {
+          ...noteDefaults,
           id: input.id,
           tenantId: input.tenantId,
           title: input.title,
@@ -199,6 +201,7 @@ describe("updateNoteForTenant", () => {
           body: "New body",
         });
         return {
+          ...noteDefaults,
           id: "note-1",
           tenantId: "org-a",
           title: "Updated",
@@ -277,6 +280,7 @@ describe("updateNoteForTenant", () => {
       },
       async findByTenantAndId() {
         return {
+          ...noteDefaults,
           id: "note-1",
           tenantId: "org-a",
           title: "Server",
