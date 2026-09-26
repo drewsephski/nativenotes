@@ -8,7 +8,7 @@ Source checklist: [`docs/QA.md`](./QA.md)
 
 ## Mission
 
-Use computer-use to exercise NativeNotes auth and ChatGPT OAuth continuation in production (and locally if needed). Prefer stable `data-testid` anchors from `docs/QA.md`. Do not rely on CSS class names.
+Use computer-use to exercise the NativeNotes product parity workflows, auth, and ChatGPT OAuth continuation in production (and locally if needed). Use accessible roles/names for product controls and stable `data-testid` anchors from `docs/QA.md` for auth. Do not rely on CSS class names.
 
 ## Hard constraints (do not break)
 
@@ -90,7 +90,7 @@ Critical fail: consent missing ChatGPT context, or ChatGPT never receives an aut
 
 ### UI quality
 
-1. Desktop ≥1200px — centered sparse monochrome cards; visible focus rings.
+1. Desktop ≥1280px — warm light product UI, left sidebar, document column and right inspector; visible focus rings. Auth screens keep their centered layout.
 2. Mobile 375px — single column; Approve/Deny stack; no horizontal scroll.
 3. Keyboard — Tab through Google/email/password/submit; consent select/Approve/Deny; Enter activates.
 4. Focus-visible outlines on every interactive control.
@@ -112,7 +112,7 @@ For each scenario:
 - Fix reproducible UI/auth bugs found during QA.
 - Prefer minimal diffs that restore expected behavior.
 - Never weaken CSRF/origin checks; if server-side auth forwards are needed, forward a trusted `Origin` (or Referer origin) to Better Auth.
-- Do not add product features beyond auth/consent bugfixes.
+- Fix reproducible defects in the implemented product and auth flows; defer unrequested new features.
 
 ## Suggested first probe
 
