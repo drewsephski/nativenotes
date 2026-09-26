@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { startNativeNotesServer } from "../src/server/index.js";
 
 const TEST_PORT = "3310";
 const TEST_BASE = `http://127.0.0.1:${TEST_PORT}`;
@@ -31,7 +32,6 @@ const {
   inArray,
   randomUUID,
 } = await import("./oauth-harness.js");
-const { startNativeNotesServer } = await import("../src/server/index.js");
 const { db, sql } = await import("../src/db/client.js");
 const {
   oauthClient,
@@ -78,6 +78,11 @@ describe("OAuth organization-bound lifecycle", () => {
 
   beforeAll(async () => {
     await migrate();
+    // Auth initialization seeds OAuth resources, so a fresh test database must
+    // be migrated before importing it, and initialization must finish first.
+    const { startNativeNotesServer } = await import("../src/server/index.js");
+    const { auth } = await import("../src/auth/auth.js");
+    await auth.$context;
     await db
       .delete(oauthClientResource)
       .where(eq(oauthClientResource.clientId, HARNESS_CLIENT_ID));
