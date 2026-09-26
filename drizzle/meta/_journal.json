@@ -15,6 +15,13 @@
       "when": 1790430793644,
       "tag": "0001_cloudy_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790444025896,
+      "tag": "0002_previous_kingpin",
+      "breakpoints": true
     }
   ]
 }

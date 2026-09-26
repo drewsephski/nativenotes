@@ -86,7 +86,7 @@ export function createNativeNotesRequestListener() {
       return;
     }
 
-    if (pathname === "/api/notes") {
+    if (pathname === "/api/notes" || pathname.startsWith("/api/notes/")) {
       // Cross-origin browser calls from the Next.js shell (e.g. :3001 → :3000).
       if (applyTrustedOriginCors(request, response)) return;
       void handleNotesRoute(request, response).catch((error) => {

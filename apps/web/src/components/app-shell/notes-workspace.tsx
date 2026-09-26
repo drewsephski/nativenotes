@@ -122,6 +122,30 @@ function NotesWorkspaceLoader({
     setMobileShowEditor(true);
   }
 
+  function handleNoteSaved(saved: Note) {
+    if (!aliveRef.current) return;
+    setLoadState((current) => {
+      if (current.status !== "success") return current;
+      const item = toNoteListItem(saved);
+      return {
+        status: "success",
+        notes: current.notes.map((note) =>
+          note.id === saved.id ? item : note,
+        ),
+      };
+    });
+  }
+
+  async function handleReloadLatest(
+    noteId: string,
+  ): Promise<NoteListItem | null> {
+    const notes = await fetchNotes();
+    if (!aliveRef.current) return null;
+    const items = notes.map(toNoteListItem);
+    setLoadState({ status: "success", notes: items });
+    return items.find((note) => note.id === noteId) ?? null;
+  }
+
   return (
     <>
       <NotesWorkspaceFrame
@@ -129,6 +153,7 @@ function NotesWorkspaceLoader({
         loadState={loadState}
         selectedId={selectedId}
         onSelect={(note) => {
+          // Unsaved drafts are discarded when switching notes (no confirm).
           setSelectedId(note.id);
           setMobileShowEditor(true);
         }}
@@ -140,6 +165,8 @@ function NotesWorkspaceLoader({
           setRetryToken((value) => value + 1);
         }}
         onCreateNote={() => setCreateOpen(true)}
+        onNoteSaved={handleNoteSaved}
+        onReloadLatest={handleReloadLatest}
       />
       <CreateNoteDialog
         open={createOpen}
@@ -159,6 +186,8 @@ function NotesWorkspaceFrame({
   onBack,
   onRetry,
   onCreateNote,
+  onNoteSaved,
+  onReloadLatest,
 }: {
   title: string;
   loadState: LoadState;
@@ -168,6 +197,8 @@ function NotesWorkspaceFrame({
   onBack?: () => void;
   onRetry?: () => void;
   onCreateNote?: () => void;
+  onNoteSaved?: (note: Note) => void;
+  onReloadLatest?: (noteId: string) => Promise<NoteListItem | null>;
 }) {
   const notes =
     loadState.status === "success" ? loadState.notes : ([] as NoteListItem[]);
@@ -271,8 +302,9 @@ function NotesWorkspaceFrame({
         <NoteEditor
           note={isLoading || isError ? null : selected}
           onBack={onBack}
+          onNoteSaved={onNoteSaved}
+          onReloadLatest={onReloadLatest}
           className="w-full"
-          readOnly
         />
       </section>
     </div>

@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import type { Note } from "../db/schema.js";
 import type { AuthContext } from "../domain/auth-context.js";
 import {
+  NoteNotFoundError,
+  NoteVersionConflictError,
+} from "../domain/errors.js";
+import {
   noteRepository,
   type NoteRepository,
 } from "../repositories/note-repository.js";
@@ -11,6 +15,7 @@ export type NoteListItem = {
   id: string;
   title: string;
   body: string;
+  version: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -25,11 +30,20 @@ export type CreateNoteForTenantInput = {
   body: string;
 };
 
+export type UpdateNoteForTenantInput = {
+  tenantId: string;
+  noteId: string;
+  expectedVersion: number;
+  title: string;
+  body: string;
+};
+
 function mapNote(note: Note): NoteListItem {
   return {
     id: note.id,
     title: note.title,
     body: note.body,
+    version: note.version,
     createdAt: note.createdAt.toISOString(),
     updatedAt: note.updatedAt.toISOString(),
   };
@@ -71,4 +85,35 @@ export async function createNoteForTenant(
     body: input.body,
   });
   return mapNote(note);
+}
+
+/**
+ * Transport-independent note update with atomic optimistic concurrency.
+ * Tenant must come from verified session / auth context.
+ */
+export async function updateNoteForTenant(
+  input: UpdateNoteForTenantInput,
+  repository: NoteRepository = noteRepository,
+): Promise<NoteListItem> {
+  const updated = await repository.update({
+    tenantId: input.tenantId,
+    noteId: input.noteId,
+    expectedVersion: input.expectedVersion,
+    title: input.title,
+    body: input.body,
+  });
+
+  if (updated) {
+    return mapNote(updated);
+  }
+
+  // Distinguish not-found vs stale version without cross-tenant disclosure.
+  const existing = await repository.findByTenantAndId(
+    input.tenantId,
+    input.noteId,
+  );
+  if (!existing) {
+    throw new NoteNotFoundError();
+  }
+  throw new NoteVersionConflictError(existing.version);
 }

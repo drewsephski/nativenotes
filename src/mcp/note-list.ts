@@ -9,6 +9,7 @@ const noteOutput = z.object({
   id: z.string(),
   title: z.string(),
   body: z.string(),
+  version: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

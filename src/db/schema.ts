@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -13,6 +14,7 @@ export const notes = pgTable(
     tenantId: text("tenant_id").notNull(),
     title: text("title").notNull(),
     body: text("body").notNull(),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
