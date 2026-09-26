@@ -1,0 +1,86 @@
+{
+  "referenceIdLifecycle": {
+    "consentReferenceIds": [
+      "VEzxUyOn2CCs6WNzx7TOnjGtaRSrKGmd"
+    ],
+    "refreshReferenceIds": [
+      "VEzxUyOn2CCs6WNzx7TOnjGtaRSrKGmd"
+    ],
+    "authorizationCodeReferenceIds": []
+  },
+  "grantA": {
+    "id": "d1c0338a5d91d96d9e812521089e7815308ed9c829c0a5c445d7a2ae68d3f2c6",
+    "userId": "zR3W4D1sx4DgQHToZG5imOCvhNVAGWja",
+    "oauthClientId": "nativenotes-oauth-harness",
+    "organizationId": "VEzxUyOn2CCs6WNzx7TOnjGtaRSrKGmd",
+    "resource": "http://127.0.0.1:3310/mcp",
+    "scopes": [
+      "mcp:read",
+      "offline_access",
+      "openid"
+    ],
+    "stableGrantIdentifier": "d1c0338a5d91d96d9e812521089e7815308ed9c829c0a5c445d7a2ae68d3f2c6",
+    "createdAt": "2026-09-26T14:42:39.184Z",
+    "updatedAt": "2026-09-26T14:42:39.184Z",
+    "revokedAt": null
+  },
+  "activeOrgDrift": {
+    "activeOrganizationId": "6qfCT8z3LNDO88wgr1sR6SggCjvLtxTJ",
+    "refreshedTenantClaim": "VEzxUyOn2CCs6WNzx7TOnjGtaRSrKGmd"
+  },
+  "grantB": {
+    "id": "d9ea4c093bab261be55870165b51eb82c3d8ad34ff4b594730ce5f86ce1d9019",
+    "userId": "zR3W4D1sx4DgQHToZG5imOCvhNVAGWja",
+    "oauthClientId": "nativenotes-oauth-harness",
+    "organizationId": "6qfCT8z3LNDO88wgr1sR6SggCjvLtxTJ",
+    "resource": "http://127.0.0.1:3310/mcp",
+    "scopes": [
+      "mcp:read",
+      "offline_access",
+      "openid"
+    ],
+    "stableGrantIdentifier": "d9ea4c093bab261be55870165b51eb82c3d8ad34ff4b594730ce5f86ce1d9019",
+    "createdAt": "2026-09-26T14:42:39.350Z",
+    "updatedAt": "2026-09-26T14:42:39.350Z",
+    "revokedAt": null
+  },
+  "independentGrants": [
+    {
+      "organizationId": "6qfCT8z3LNDO88wgr1sR6SggCjvLtxTJ",
+      "stableGrantIdentifier": "d9ea4c093bab261be55870165b51eb82c3d8ad34ff4b594730ce5f86ce1d9019",
+      "revokedAt": null
+    },
+    {
+      "organizationId": "VEzxUyOn2CCs6WNzx7TOnjGtaRSrKGmd",
+      "stableGrantIdentifier": "d1c0338a5d91d96d9e812521089e7815308ed9c829c0a5c445d7a2ae68d3f2c6",
+      "revokedAt": null
+    }
+  ],
+  "membershipRemoval": {
+    "status": 403,
+    "body": {
+      "error": "forbidden",
+      "error_description": "Organization membership is no longer active"
+    }
+  },
+  "refreshReuse": {
+    "firstStatus": 200,
+    "reuseStatus": 200,
+    "reuseBodyKeys": [
+      "access_token",
+      "expires_in",
+      "expires_at",
+      "token_type",
+      "refresh_token",
+      "scope",
+      "id_token"
+    ],
+    "tenantUnchanged": true,
+    "observed": "immediate reuse within refreshTokenReuseInterval=30 returned a token response"
+  },
+  "security": {
+    "tenantArgIgnored": true,
+    "anonymousRejected": 401,
+    "foreignOrgConsent": 403
+  }
+}

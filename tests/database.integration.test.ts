@@ -10,6 +10,9 @@ const tenantB = "org-test-b";
 
 describe("database tenant isolation", () => {
   beforeAll(async () => {
+    await db
+      .delete(notes)
+      .where(inArray(notes.id, ["note-test-a", "note-test-b"]));
     await db.insert(notes).values([
       { id: "note-test-a", tenantId: tenantA, title: "A", body: "A" },
       { id: "note-test-b", tenantId: tenantB, title: "B", body: "B" },
@@ -17,7 +20,9 @@ describe("database tenant isolation", () => {
   });
 
   afterAll(async () => {
-    await db.delete(notes).where(inArray(notes.tenantId, [tenantA, tenantB]));
+    await db
+      .delete(notes)
+      .where(inArray(notes.id, ["note-test-a", "note-test-b"]));
   });
 
   it("returns only the requested tenant's notes", async () => {

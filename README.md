@@ -1,6 +1,6 @@
-# Hjarni Clone
+# NativeNotes
 
-Backend-first foundation for a self-hosted, multi-tenant MCP notes service. This repository currently proves the Better Auth OAuth/MCP boundary, organization-bound tenant claims, membership revocation checks, and the read-only `note.list` tool.
+Backend-first foundation for a self-hosted, multi-tenant MCP notes service, inspired by Hjarni. This repository currently proves the Better Auth OAuth/MCP boundary, organization-bound tenant claims, membership revocation checks, and the read-only `note.list` tool.
 
 ## Local setup
 
@@ -14,11 +14,16 @@ pnpm db:migrate
 pnpm dev
 ```
 
-The server listens on `http://localhost:3000`. Health is available at `/health`; the protected MCP endpoint is `/mcp`. Run the complete local check with:
+The server listens on `http://localhost:3000`. Health is available at `/health`; the protected MCP endpoint is `/mcp`. Minimal local auth UI is at `/sign-in` and `/sign-up`. Run the complete local check with:
 
 ```sh
 pnpm check
 ```
 
+Run the interactive OAuth lifecycle proof (authorization-code + PKCE against local Postgres) with:
+
+```sh
+pnpm test:oauth
+```
+
 Better Auth's internal schema is generated with `pnpm auth:generate`; application and generated Better Auth migrations are created with `pnpm db:generate` and applied with `pnpm db:migrate`.
-# nativenotes

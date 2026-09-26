@@ -32,7 +32,7 @@ export async function listNotes(
 }
 
 export function createMcpServer(authContext: AuthContext): McpServer {
-  const server = new McpServer({ name: "hjarni", version: "0.1.0" });
+  const server = new McpServer({ name: "nativenotes", version: "0.1.0" });
 
   server.registerTool(
     "note.list",

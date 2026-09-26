@@ -19,7 +19,7 @@ export async function buildAuthContext(
   const role = stringClaim(payload, tenantRoleClaim);
 
   if (!userId || !tenantId || !scope)
-    throw new Error("Verified token is missing required Hjarni claims");
+    throw new Error("Verified token is missing required NativeNotes claims");
 
   const membership = await getCurrentMembership(adapter, userId, tenantId);
   const scopes = scope.split(" ").filter(Boolean);

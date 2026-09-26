@@ -11,6 +11,7 @@ import {
   organizationConsentReferenceId,
   createGrantBindingExtension,
 } from "./grant-binding.js";
+import { getSelectedOrganization } from "./consent-selection.js";
 
 import type { MembershipAdapter } from "../services/membership-service.js";
 
@@ -19,12 +20,15 @@ let getAuthAdapter: () => Promise<MembershipAdapter> = async () => {
 };
 
 export const auth = betterAuth({
-  appName: "Hjarni",
+  appName: "NativeNotes",
   baseURL: env.BETTER_AUTH_URL,
   basePath: "/api/auth",
   secret: env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(db, { provider: "pg", schema: combinedSchema }),
   trustedOrigins: [env.BETTER_AUTH_URL],
+  emailAndPassword: {
+    enabled: true,
+  },
   plugins: [
     organization(),
     jwt({ jwt: { issuer: betterAuthIssuer } }),
@@ -47,7 +51,12 @@ export const auth = betterAuth({
       extensions: [createGrantBindingExtension()],
       postLogin: {
         page: "/oauth/consent",
-        shouldRedirect: async ({ scopes }) => scopes.includes("mcp:read"),
+        // Redirect only until this request has an explicit org selection in ALS.
+        // Returning true unconditionally loops authorize ↔ postLogin forever.
+        shouldRedirect: async ({ scopes }) => {
+          if (!scopes.includes("mcp:read")) return false;
+          return getSelectedOrganization() === undefined;
+        },
         consentReferenceId: async ({ user, scopes }) => {
           return organizationConsentReferenceId({
             user,

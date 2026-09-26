@@ -1,8 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { fromNodeHeaders } from "better-auth/node";
+
 import { auth } from "../auth/auth.js";
 import { withSelectedOrganization } from "../auth/consent-selection.js";
-import { fromNodeHeaders } from "better-auth/node";
+import { env } from "../config/env.js";
 
 type Organization = { id: string; name: string };
 type OrganizationApi = {
@@ -11,15 +13,6 @@ type OrganizationApi = {
     headers: Headers;
     body: { organizationId: string };
   }): Promise<unknown>;
-  oauth2Consent(input: {
-    headers: Headers;
-    body: {
-      accept: boolean;
-      scope?: string;
-      claims?: string;
-      oauth_query?: string;
-    };
-  }): Promise<{ redirect_uri?: string }>;
 };
 
 const organizationApi = auth.api as unknown as OrganizationApi;
@@ -73,7 +66,10 @@ export async function handleConsentRoute(
   if (request.method === "GET") {
     const organizations = await organizationApi.listOrganizations({ headers });
     const url = new URL(request.url ?? "/oauth/consent", "http://localhost");
-    const oauthQuery = url.searchParams.get("oauth_query") ?? "";
+    // Better Auth redirects with the signed OAuth query as the page query string.
+    const oauthQuery = url.search.startsWith("?")
+      ? url.search.slice(1)
+      : url.search;
     const choices = organizations
       .map(
         (organization) =>
@@ -83,7 +79,7 @@ export async function handleConsentRoute(
     writeHtml(
       response,
       200,
-      `<h1>Approve Hjarni access</h1><p>Select the organization this OAuth grant will be permanently bound to.</p><form method="post"><label>Organization <select name="organization_id" required>${choices}</select></label><input type="hidden" name="oauth_query" value="${escapeHtml(oauthQuery)}"><input type="hidden" name="accept" value="true"><button type="submit">Continue</button></form>`,
+      `<h1>Approve NativeNotes access</h1><p>Select the organization this OAuth grant will be permanently bound to.</p><form method="post"><label>Organization <select name="organization_id" required>${choices}</select></label><input type="hidden" name="oauth_query" value="${escapeHtml(oauthQuery)}"><input type="hidden" name="accept" value="true"><button type="submit">Continue</button></form>`,
     );
     return;
   }
@@ -114,25 +110,67 @@ export async function handleConsentRoute(
     headers,
     body: { organizationId },
   });
-  const result = await withSelectedOrganization(organizationId, () =>
-    organizationApi.oauth2Consent({
-      headers,
-      body: {
+
+  // auth.api.oauth2Consent has no ctx.request, and authorize requires one.
+  // Call the real HTTP consent endpoint inside ALS so referenceId binds.
+  const consentRequest = new Request(
+    new URL("/api/auth/oauth2/consent", env.BETTER_AUTH_URL),
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        cookie: request.headers.cookie ?? "",
+      },
+      body: JSON.stringify({
         accept: body.accept === "true",
         ...(body.scope ? { scope: body.scope } : {}),
         ...(body.claims ? { claims: body.claims } : {}),
         ...(body.oauth_query ? { oauth_query: body.oauth_query } : {}),
-      },
-    }),
+      }),
+    },
   );
 
+  const consentResponse = await withSelectedOrganization(organizationId, () =>
+    auth.handler(consentRequest),
+  );
+
+  const setCookie = consentResponse.headers.getSetCookie?.() ?? [];
+  if (setCookie.length > 0) response.setHeader("set-cookie", setCookie);
+
+  const location = consentResponse.headers.get("location");
+  if (location) {
+    response.writeHead(303, {
+      location,
+      "cache-control": "no-store",
+    });
+    response.end();
+    return;
+  }
+
+  const payload = (await consentResponse.json().catch(() => null)) as {
+    redirect_uri?: string;
+    redirect?: boolean;
+    url?: string;
+    error?: string;
+    error_description?: string;
+  } | null;
+
   const redirectUri =
-    typeof result === "object" &&
-    result !== null &&
-    "redirect_uri" in result &&
-    typeof result.redirect_uri === "string"
-      ? result.redirect_uri
-      : "/";
+    payload?.redirect_uri ??
+    (payload?.redirect === true && typeof payload.url === "string"
+      ? payload.url
+      : null);
+
+  if (!redirectUri) {
+    writeHtml(
+      response,
+      consentResponse.status >= 400 ? consentResponse.status : 400,
+      `<h1>Consent failed</h1><p>${escapeHtml(payload?.error_description ?? payload?.error ?? "Unable to complete consent")}</p>`,
+    );
+    return;
+  }
+
   response.writeHead(303, {
     location: redirectUri,
     "cache-control": "no-store",
