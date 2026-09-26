@@ -40,16 +40,29 @@ export const noteRepository: NoteRepository = {
     return db
       .select()
       .from(notes)
-      .where(and(eq(notes.tenantId, tenantId), isNull(notes.archivedAt), isNull(notes.trashedAt)))
+      .where(
+        and(
+          eq(notes.tenantId, tenantId),
+          isNull(notes.archivedAt),
+          isNull(notes.trashedAt),
+        ),
+      )
       .orderBy(asc(notes.createdAt));
   },
 
   async create(input) {
     return db.transaction(async (tx) => {
-      const [note] = await tx.insert(notes).values({
-        id: input.id, tenantId: input.tenantId, title: input.title,
-        body: input.body, summary: input.summary, createdByUserId: input.authorUserId,
-      }).returning();
+      const [note] = await tx
+        .insert(notes)
+        .values({
+          id: input.id,
+          tenantId: input.tenantId,
+          title: input.title,
+          body: input.body,
+          summary: input.summary,
+          createdByUserId: input.authorUserId,
+        })
+        .returning();
       if (!note) throw new Error("Failed to create note");
       await tx.insert(noteRevisions).values(snapshot(note, input.authorUserId));
       return note;
@@ -58,21 +71,42 @@ export const noteRepository: NoteRepository = {
 
   async update(input) {
     return db.transaction(async (tx) => {
-      const [prior] = await tx.select().from(notes).where(and(
-        eq(notes.tenantId, input.tenantId), eq(notes.id, input.noteId),
-      )).for("update");
+      const [prior] = await tx
+        .select()
+        .from(notes)
+        .where(
+          and(eq(notes.tenantId, input.tenantId), eq(notes.id, input.noteId)),
+        )
+        .for("update");
       if (!prior || prior.version !== input.expectedVersion) return null;
       // Seed the baseline for notes that predate revision history.
-      await tx.insert(noteRevisions).values(snapshot(prior)).onConflictDoNothing();
-      const [updated] = await tx.update(notes).set({
-        title: input.title, body: input.body,
-        ...(input.summary !== undefined ? { summary: input.summary } : {}),
-        updatedAt: sql`now()`, version: sql`${notes.version} + 1`,
-        freshness: "needs_review", verifiedAt: null,
-      }).where(and(eq(notes.tenantId, input.tenantId), eq(notes.id, input.noteId),
-        eq(notes.version, input.expectedVersion))).returning();
+      await tx
+        .insert(noteRevisions)
+        .values(snapshot(prior))
+        .onConflictDoNothing();
+      const [updated] = await tx
+        .update(notes)
+        .set({
+          title: input.title,
+          body: input.body,
+          ...(input.summary !== undefined ? { summary: input.summary } : {}),
+          updatedAt: sql`now()`,
+          version: sql`${notes.version} + 1`,
+          freshness: "needs_review",
+          verifiedAt: null,
+        })
+        .where(
+          and(
+            eq(notes.tenantId, input.tenantId),
+            eq(notes.id, input.noteId),
+            eq(notes.version, input.expectedVersion),
+          ),
+        )
+        .returning();
       if (!updated) throw new Error("Locked note update failed");
-      await tx.insert(noteRevisions).values(snapshot(updated, input.authorUserId));
+      await tx
+        .insert(noteRevisions)
+        .values(snapshot(updated, input.authorUserId));
       return updated;
     });
   },
@@ -88,7 +122,15 @@ export const noteRepository: NoteRepository = {
 };
 
 function snapshot(note: Note, authorUserId?: string) {
-  return { id: randomUUID(), tenantId: note.tenantId, noteId: note.id,
-    version: note.version, title: note.title, body: note.body, summary: note.summary,
-    authorUserId: authorUserId ?? null, createdAt: note.updatedAt };
+  return {
+    id: randomUUID(),
+    tenantId: note.tenantId,
+    noteId: note.id,
+    version: note.version,
+    title: note.title,
+    body: note.body,
+    summary: note.summary,
+    authorUserId: authorUserId ?? null,
+    createdAt: note.updatedAt,
+  };
 }

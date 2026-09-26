@@ -1,5 +1,9 @@
 import { handleProductRoute } from "./product-route.js";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { toNodeHandler as toAuthNodeHandler } from "better-auth/node";
@@ -7,7 +11,11 @@ import { toNodeHandler as toAuthNodeHandler } from "better-auth/node";
 import { auth } from "../auth/auth.js";
 import { env } from "../config/env.js";
 import { protectedMcpHandler } from "../mcp/handler.js";
-import { handleSignInRoute, handleSignUpRoute, handleGoogleSignInRoute } from "./auth-routes.js";
+import {
+  handleSignInRoute,
+  handleSignUpRoute,
+  handleGoogleSignInRoute,
+} from "./auth-routes.js";
 import { handleConsentRoute } from "./consent-route.js";
 import { applyTrustedOriginCors } from "./cors.js";
 import { handleNotesRoute } from "./notes-route.js";
@@ -56,7 +64,10 @@ export function createNativeNotesRequestListener() {
 
     if (pathname === "/oauth/consent") {
       void handleConsentRoute(request, response).catch((error) => {
-        console.error("consent route failure", error instanceof Error ? error.message : "unknown");
+        console.error(
+          "consent route failure",
+          error instanceof Error ? error.message : "unknown",
+        );
         if (!response.headersSent)
           writeJson(response, 500, { error: "internal_server_error" });
       });

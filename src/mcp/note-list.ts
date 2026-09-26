@@ -1,3 +1,4 @@
+import { registerProductTools } from "./product-tools.js";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/server";
 
@@ -44,5 +45,6 @@ export function createMcpServer(authContext: AuthContext): McpServer {
     },
   );
 
+  registerProductTools(server, authContext);
   return server;
 }

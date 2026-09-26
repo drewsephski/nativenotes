@@ -11,7 +11,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { publicOrigin, trustedOrigins } from "../config/env.js";
 
 const ALLOWED_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
-const ALLOWED_HEADERS = "Content-Type, X-Workspace-Id, Authorization, X-Requested-With";
+const ALLOWED_HEADERS =
+  "Content-Type, X-Workspace-Id, Authorization, X-Requested-With";
 
 function requestOrigin(request: IncomingMessage): string | undefined {
   const origin = request.headers.origin;
