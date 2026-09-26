@@ -13,7 +13,13 @@ export function sanitizeTrustedCallbackURL(
   if (!value || value.trim().length === 0) return undefined;
   try {
     const parsed = new URL(value);
-    if (!trustedOrigins.includes(parsed.origin)) return undefined;
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password ||
+      !trustedOrigins.includes(parsed.origin)
+    )
+      return undefined;
     return parsed.toString();
   } catch {
     return undefined;
@@ -70,22 +76,10 @@ export function resolvePostLoginLocation(input: PostLoginIntentInput): string {
 }
 
 /**
- * callbackURL passed into Better Auth social sign-in.
- * Never `/`. When oauth_query is present, Better Auth still continues MCP
- * OAuth via serverContext; this is only the non-OAuth fallback.
+ * Better Auth preserves signed oauth_query in serverContext across Google.
+ * Also use authorize as the social fallback so an MCP login cannot fall into
+ * the app if the provider ever returns its ordinary callbackURL.
  */
-export function resolveSocialCallbackURL(input: {
-  oauthQuery?: string | null;
-  callbackURL?: string | null;
-  trustedOrigins: readonly string[];
-}): string {
-  const oauthQuery = sanitizeOAuthQuery(input.oauthQuery ?? "");
-  if (oauthQuery.length > 0) {
-    // Prefer continuing OAuth; /app is only a non-OAuth safety net.
-    return DEFAULT_POST_LOGIN_PATH;
-  }
-  return (
-    sanitizeTrustedCallbackURL(input.callbackURL, input.trustedOrigins) ??
-    DEFAULT_POST_LOGIN_PATH
-  );
+export function resolveSocialCallbackURL(input: PostLoginIntentInput): string {
+  return resolvePostLoginLocation(input);
 }

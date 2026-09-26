@@ -30,7 +30,17 @@ function resolveRewriteOrigin(): string | null {
     process.env.VERCEL_ENV === "preview" ||
     process.env.VERCEL === "1";
 
-  return validateBackendOrigin(raw, { requireProductionHttps });
+  return validateBackendOrigin(raw, {
+    requireProductionHttps,
+    publicHostnames: [
+      "nativenotes.app",
+      "www.nativenotes.app",
+      ...[
+        process.env.VERCEL_URL,
+        process.env.VERCEL_PROJECT_PRODUCTION_URL,
+      ].filter((host): host is string => Boolean(host)),
+    ],
+  });
 }
 
 const nextConfig: NextConfig = {

@@ -69,24 +69,25 @@ External rewrites are defined in [`apps/web/next.config.ts`](../apps/web/next.co
 
 ## Unified production routing
 
-Canonical public domain: **https://nativenotes.app** (or `www` — pick **one** host and use it everywhere).
+Steady-state topology: **public/product origin `https://nativenotes.app`** → Next.js (`apps/web`) → explicit external rewrites → **internal backend `https://nativenotes.vercel.app`** (repository root). The backend hostname is infrastructure, not product identity; it remains publicly reachable for Vercel rewrites and is protected by the existing auth/MCP controls. It is not a private network endpoint.
 
-### Apex vs www (required)
+Canonical public domain: **https://nativenotes.app**. Attach the apex to the web project as a serving domain, with no redirect. If retaining `www.nativenotes.app`, attach it to the web project and redirect **www → apex**, never apex → www. The pre-cutover backend used www; that is historical configuration, not the target identity.
 
-Vercel may attach both `nativenotes.app` and `www.nativenotes.app`. One must be primary; the other should 308 to it.
+### Exact Vercel project setup
 
-**Today’s backend project** currently redirects apex → `www.nativenotes.app`. Until that is reversed, production env must use **www** as the single public origin:
+1. Keep the existing `nativenotes` backend project, root `.`, Node preset, install `pnpm install`, build `pnpm build`, Node 22.x. Keep `nativenotes.vercel.app` serving directly (no redirect to the public domain). Preserve its database, auth secret, Google credentials, and all backend settings.
+2. Vercel → Add New → Project → import the same repository as **nativenotes-web**. Select **Next.js**, Root Directory **apps/web**, Node **22.x**, and enable **Include source files outside of the Root Directory** so the workspace lockfile is available. Install command `pnpm install --frozen-lockfile`; build command `pnpm build`; output directory stays the Next.js default.
+3. Before the first web build, add `NATIVE_NOTES_BACKEND_ORIGIN=https://nativenotes.vercel.app` to **Production and Preview**. This is a build-time, server-only variable: changing it requires rebuilding the web deployment. Never put backend secrets or database URLs in the web project.
+4. Remove `NEXT_PUBLIC_NATIVE_NOTES_API_URL` from web Production/Preview. Production browser code always uses `window.location.origin`, even if a stale override survives. Set `NEXT_PUBLIC_WEB_ORIGIN=https://nativenotes.app` for the server-rendering fallback.
+5. Deploy and verify the preview's `/`, `/app`, `/health`, `/api/auth/get-session`, metadata, and Google start response. Before canonical cutover, metadata and Google's callback still name the **old** public origin; a preview is only a routing check, not full canonical-login proof. Do not add wildcard trusted origins to make preview login work.
+6. After preview checks, move the domains to the web project. If apex currently redirects to www, Vercel requires moving **www first** and automatically moves its redirecting apex with it. Move www initially without a redirect, clear the apex redirect so apex serves Production, then set www → apex after the backend identity switch. This order avoids a redirect loop. Preserve the backend project and its stable Vercel hostname.
+7. Set the four canonical backend values below together and redeploy backend immediately. Then complete public-origin smoke and interactive proof. A two-project issuer switch is not atomic: keep this interval short, do not initiate new OAuth flows during it, and reconnect existing clients afterward.
 
-| Variable | Must match the Vercel primary host |
-| --- | --- |
-| `BETTER_AUTH_URL` | `https://www.nativenotes.app` |
-| `MCP_RESOURCE_URL` | `https://www.nativenotes.app/mcp` |
-| `TENANT_CLAIM_NAMESPACE` | `https://www.nativenotes.app/claims` |
-| `TRUSTED_ORIGINS` | `https://www.nativenotes.app` (optionally also apex) |
+The root `.vercelignore` excludes local env files and build artifacts from CLI uploads. The web project has its own `apps/web/vercel.json`; from the repository root use `vercel deploy --project nativenotes-web --local-config apps/web/vercel.json` so the backend function configuration is not applied.
 
-Do **not** mix apex issuer with www resource (or the reverse). Smoke and boot both fail on that split.
+Project deployment protection must allow the web rewrite to reach backend routes and anonymous MCP discovery. Do not forward client-supplied bypass, tenant, or trusted-proxy headers. Rewrites only map the listed paths; authentication and tenant selection remain backend-owned.
 
-Preferred long-term (matches docs that cite apex): in Vercel Domains, set `www` → redirect to `nativenotes.app`, then flip all four vars to apex and redeploy.
+References: [Vercel monorepos](https://vercel.com/docs/monorepos), [Next.js external rewrites](https://nextjs.org/docs/app/api-reference/config/next-config-js/rewrites).
 
 | Path | Serves |
 | --- | --- |
@@ -121,8 +122,8 @@ Trusted callbacks are restricted to `trustedOrigins` (open redirects rejected).
 
 1. Deploy updated backend while the old public URL still works.
 2. Add Google authorized redirect URI `https://nativenotes.app/api/auth/callback/google` (keep the old `nativenotes.vercel.app` URI temporarily).
-3. Create/deploy the web Vercel project (`apps/web`).
-4. Set web `NATIVE_NOTES_BACKEND_ORIGIN` to the backend project hostname.
+3. Create the web Vercel project (`apps/web`).
+4. Set web `NATIVE_NOTES_BACKEND_ORIGIN` to the backend project hostname, then deploy (the build requires this env).
 5. Verify a web preview with rewrites (`/health`, auth metadata, cookies).
 6. Point `nativenotes.app` at the **web** project.
 7. Update backend canonical `BETTER_AUTH_URL` / `MCP_RESOURCE_URL` / `TENANT_CLAIM_NAMESPACE` / `TRUSTED_ORIGINS` to `https://nativenotes.app`.
@@ -259,15 +260,18 @@ Checks (no secrets):
 - protected resource metadata (canonical `/mcp`, matching authorization server)
 - JWKS
 - anonymous `POST /mcp` → 401 Bearer
-- when targeting `nativenotes.app`: metadata must not mention `nativenotes.vercel.app`
+- when targeting `nativenotes.app`: metadata must not mention any `*.vercel.app` hostname
+- redirects are rejected: apex-to-www cannot silently pass canonical smoke
+- advertised JWKS URL and authorization/token endpoints use the public origin
+- the MCP challenge points to reachable public protected-resource metadata
 
 ## Production MCP interoperability proof
 
-Recorded against production (`https://nativenotes.vercel.app`). No secrets or raw tokens are included.
+Verified public metadata after cutover (`https://nativenotes.app`). No secrets or raw tokens are included.
 
 | Item | Value |
 | --- | --- |
-| Canonical domain | `https://nativenotes.vercel.app` |
+| Canonical domain | `https://nativenotes.app` |
 | Vercel deployment model | Root `server.ts` Node entrypoint, Fluid/serverless, `maxDuration: 60` |
 | Preferred client | **ChatGPT** (CIMD). Cursor rejected: DCR/static-client only |
 | CIMD discovery | NativeNotes advertises `client_id_metadata_document_supported: true`; DCR remains disabled |
@@ -275,13 +279,13 @@ Recorded against production (`https://nativenotes.vercel.app`). No secrets or ra
 | ChatGPT redirect | `https://chatgpt.com/connector_platform_oauth_redirect` |
 | Token auth expectation | Intersection `none` ∪ `private_key_jwt`; ChatGPT singular preference → **`private_key_jwt`** |
 | PKCE | S256 required and advertised |
-| Resource / audience | `https://nativenotes.vercel.app/mcp` |
+| Resource / audience | `https://nativenotes.app/mcp` |
 
 ### Production discovery snapshot (actual)
 
 Authorization server (`GET /api/auth/.well-known/oauth-authorization-server`):
 
-- `issuer`: `https://nativenotes.vercel.app/api/auth`
+- `issuer`: `https://nativenotes.app/api/auth`
 - `authorization_endpoint`: `…/api/auth/oauth2/authorize`
 - `token_endpoint`: `…/api/auth/oauth2/token`
 - `jwks_uri`: `…/api/auth/jwks`
@@ -295,17 +299,17 @@ Authorization server (`GET /api/auth/.well-known/oauth-authorization-server`):
 
 Protected resource (`GET /.well-known/oauth-protected-resource`):
 
-- `resource`: `https://nativenotes.vercel.app/mcp`
-- `authorization_servers`: `["https://nativenotes.vercel.app/api/auth"]`
+- `resource`: `https://nativenotes.app/mcp`
+- `authorization_servers`: `["https://nativenotes.app/api/auth"]`
 - `bearer_methods_supported`: `["header"]`
 
-Anonymous `POST /mcp` returns `401` with `WWW-Authenticate: Bearer resource_metadata="https://nativenotes.vercel.app/.well-known/oauth-protected-resource/mcp"`.
+Anonymous `POST /mcp` returns `401` with `WWW-Authenticate: Bearer resource_metadata="https://nativenotes.app/.well-known/oauth-protected-resource/mcp"`.
 
 ### ChatGPT setup checklist
 
-1. `pnpm smoke:remote https://nativenotes.vercel.app`
+1. `pnpm smoke:remote https://nativenotes.app`
 2. `pnpm validate:chatgpt-cimd`
-3. ChatGPT Developer Mode → custom MCP → `https://nativenotes.vercel.app/mcp` → OAuth/CIMD (not DCR)
+3. ChatGPT Developer Mode → custom MCP → `https://nativenotes.app/mcp` → OAuth/CIMD (not DCR)
 4. NativeNotes sign-in (Google or email) → consent → create/select Organization A
 5. `pnpm seed:proof-notes <orgAId> [orgBId]`
 6. ChatGPT tool scan → `note.list`
@@ -337,3 +341,51 @@ Do **not** enable DCR to unblock Cursor. Do **not** seed a static OAuth client. 
 
 - Docker Compose local Postgres (Neon covers dev/test/prod)
 - `@neon/config` / `@neon/env` / `neon.ts` / Neon Functions sample (`hello.ts`) — unused for this Vercel Node deployment path
+
+## Cookies / CORS
+
+Better Auth retains secure, HTTP-only, SameSite=Lax host-only cookies. No broad Domain setting or cross-subdomain cookie option is added. External rewrites must preserve each `Set-Cookie` header; the browser stores the cookie against `nativenotes.app`, and subsequent same-origin requests forward it to the backend. Inspect cookie attributes and `/api/auth/get-session` after login before declaring the cutover successful. Old www/backend-host cookies do not transfer; users must log in on apex.
+
+Local development remains `http://localhost:3001` → `http://localhost:3000` with credentials and the existing explicit localhost CORS allowance. Production needs no CORS. CSRF/trusted mutation origins, DCR-disabled CIMD protected fetch, tenant grants, membership rechecks, and resource/audience checks remain unchanged.
+
+## Required validation record
+
+Run backend `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`; run web `pnpm --filter web lint`, `pnpm --filter web typecheck`, `pnpm --filter web test`, `pnpm --filter web build`. DB tests require the existing isolated `TEST_DATABASE_URL` guard; never substitute production.
+
+After cutover, run `pnpm smoke:remote https://nativenotes.app`, then record these **separately** from automated tests:
+
+- Signed-out `/app` → `/sign-in?callbackURL=https://nativenotes.app/app` → Google → public callback → `/app`.
+- Direct `/sign-in` without callback → Google or email → `/app`.
+- Session, workspace list, active workspace, note list, and a disposable note creation load correctly.
+- Logout → login → `/app`; no stale session or cross-origin browser calls.
+- ChatGPT connects to public `/mcp` → discovery → authorize → Google → consent → workspace selection → Approve → ChatGPT callback. No intermediate `/app` redirect. Re-run a tenant-scoped tool call.
+- Public cookies stay host-only, Secure, HttpOnly; OAuth state survives Google's round trip; no internal hostname in metadata or redirects.
+
+Issuer, audience, and claim namespace migration invalidates old client assumptions and tokens. Reconnect ChatGPT; do not accept the old audience or weaken validation. Keep the old Google callback configured until all checks pass. For rollback restore the previous domain ownership/redirect and all four backend canonical values together, using the recorded prior deployment. Do not rotate `BETTER_AUTH_SECRET`, delete the backend project, or change Neon as part of routing rollback.
+
+## Cutover execution status — 2026-09-26
+
+- Backend lint/typecheck/build and **101 tests** passed; web lint/typecheck/build and **44 tests** passed. OAuth lifecycle covers real Better Auth signed state/callback handling with only upstream Google token/profile responses mocked.
+- Vercel capacity was freed; `nativenotes-web` was created with root `apps/web`, Next.js, and the server-only backend rewrite origin. Apex and www belong to the web project; apex serves directly and www redirects to apex. Backend retains only its stable Vercel hostname.
+- Canonical backend production deployment: `dpl_5eFZgg2XEkGUp9Y4EejggjxorRUT`. Web production deployment: `dpl_3LPHUDiLqEHjSuU4eJiYqgGWtpNN`. The compatible pre-cutover backend `dpl_CuiPgLfGVP87rQnJiHZZkLXv7ZgG` remains available for coordinated rollback.
+- All four backend canonical identity variables now use apex. Strict `pnpm smoke:remote https://nativenotes.app` passes health, issuer, PRM, JWKS, and anonymous MCP challenge checks. Metadata from both public and backend hosts advertises apex, never the rewrite hostname.
+- Live Dia browser proof: signed-out `/app` returns through Google to `/app`; direct `/sign-in` without callback returns through Google to `/app`; logout and fresh login work; session, workspace selection, note loading, and note creation succeed. Google state cookies preserve Secure/HttpOnly/SameSite=Lax with no Domain through rewrites.
+- Browser QA found that a fresh session's first membership was incorrectly displayed as active. The selector now requires an actual active organization and lets the user select the first workspace. Backend organization and MCP grant logic are unchanged.
+- Browser QA also found a pre-existing schema mismatch: checked-in backend queries `notes.version`, but production had not applied `0002_previous_kingpin.sql`. With explicit user approval, that exact additive migration and its Drizzle journal record were applied together on the production branch. Existing notes were preserved. No new editing implementation was added.
+- Created the labeled note `Production routing smoke check — 2026-09-26` to verify same-origin production writes and persistence across logout/login.
+- ChatGPT canonical replacement **NativeNotes App** connects to `https://nativenotes.app/mcp`. Live signed-out authorization went through Google and consent; backend logs confirm consent submit/redirect, token exchange 200, and authenticated MCP discovery/tool listing with apex issuer and audience. The ChatGPT read-only check confirmed the production smoke note exists. The old **NativeNotes** connector still points at the backend hostname; its stale reconnect was not approved. Retain it only for rollout reference and remove it during cleanup; use **NativeNotes App** going forward.
+- Old Google callback entries are temporarily retained for rollout cleanup. Old host sessions/tokens do not transfer to apex. No auth secret rotation, wildcard CORS, proxy-header trust, or old-audience exception was introduced.
+- Backend logs warn that Better Auth cannot resolve a trusted client IP and uses a shared per-path rate-limit bucket. Leave this protection intact; a separate platform-aware rate-limit review is needed before introducing any proxy-header trust.
+- Live email login was not exercised with the user's password; email intent and redirects are covered by HTTP route and database-backed lifecycle tests.
+
+## Reproducible release and compatibility cleanup
+
+The `Validate` GitHub workflow runs backend and web lint/typecheck/tests/build on Node 22 with pnpm 10.33.2 and an isolated PostgreSQL 18 service. CI has no production database or OAuth credentials. Review every PR check, including both Vercel projects, before merging. Vercel builds both projects from the merged main commit; verify each deployment's Git SHA and Ready state before running canonical smoke and browser checks.
+
+Migration audit: all three production Drizzle hashes match their committed SQL files and journal timestamps. `0002_previous_kingpin.sql` adds `notes.version integer NOT NULL DEFAULT 1`; it is already applied and must not be edited or duplicated. Production columns/defaults/nullability and declared indexes were checked against `0002_snapshot.json`.
+
+After the committed main deployment passes smoke, app Google login, workspace/notes, and a ChatGPT MCP read, remove the old Google backend callback from the existing OAuth client. Keep the canonical callback and the localhost callback if used. This changes provider configuration only; do not rotate credentials or invalidate the working grant.
+
+**User-managed ChatGPT cleanup:** remove the old connector named **NativeNotes**. Retain **NativeNotes App**, pointing to `https://nativenotes.app/mcp`, and its existing working grant. Do not automate ChatGPT configuration changes.
+
+For an ordinary release rollback, promote the last known-good backend and web deployments while retaining the apex canonical variables and domain ownership. The additive version migration remains compatible; do not drop the column. Restoring the pre-cutover identity is a separate coordinated rollback that also requires reinstating old provider callbacks and reconnecting clients.

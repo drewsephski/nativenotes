@@ -2,7 +2,7 @@
 
 Executable browser scenarios for automated computer-use agents (for example Grokbot). Prefer the stable `data-testid` anchors listed below. Do not rely on CSS class names.
 
-Production origin: `https://nativenotes.vercel.app`
+Production origin: `https://nativenotes.app`
 
 ## Stable interaction anchors
 
@@ -22,8 +22,8 @@ Production origin: `https://nativenotes.vercel.app`
 ## Prerequisites
 
 1. Production has `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set.
-2. Google Cloud OAuth client allows redirect URI `https://nativenotes.vercel.app/api/auth/callback/google`.
-3. ChatGPT custom MCP points at `https://nativenotes.vercel.app/mcp`.
+2. Google Cloud OAuth client allows redirect URI `https://nativenotes.app/api/auth/callback/google`.
+3. ChatGPT custom MCP points at `https://nativenotes.app/mcp`.
 4. Optional: email/password test user for fallback cases.
 
 ---
@@ -32,7 +32,7 @@ Production origin: `https://nativenotes.vercel.app`
 
 ### Fresh signup via Google
 
-1. Open `https://nativenotes.vercel.app/sign-up`.
+1. Open `https://nativenotes.app/sign-up`.
 2. Click `[data-testid="google-sign-in"]`.
 3. Complete Google account chooser / consent for a new email.
 4. Expect redirect back to NativeNotes home or an OAuth continuation page.
@@ -40,7 +40,7 @@ Production origin: `https://nativenotes.vercel.app`
 
 ### Returning Google sign-in
 
-1. Open `https://nativenotes.vercel.app/sign-in`.
+1. Open `https://nativenotes.app/sign-in`.
 2. Click `[data-testid="google-sign-in"]`.
 3. Choose the previously used Google account.
 4. Pass if signed in without creating a second NativeNotes user for the same email.
@@ -151,7 +151,7 @@ Fail if consent page has no ChatGPT client context, or ChatGPT never receives an
 
 ### Bad callback
 
-1. Open `https://nativenotes.vercel.app/api/auth/callback/google` without a valid state/code.
+1. Open `https://nativenotes.app/api/auth/callback/google` without a valid state/code.
 2. Pass if Better Auth returns an error page / redirect with error, not a silent success.
 
 ### Network / retry

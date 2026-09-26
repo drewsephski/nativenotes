@@ -3,9 +3,7 @@
  * Read-only remote smoke checks for a deployed NativeNotes origin.
  *
  * Usage:
- *   pnpm smoke:remote https://www.nativenotes.app
- *   pnpm smoke:remote https://nativenotes.app   # follows apex→www (or reverse)
- *   pnpm smoke:remote https://nativenotes.vercel.app
+ *   pnpm smoke:remote https://nativenotes.app
  *
  * No secrets required. Does not perform authenticated OAuth.
  */
@@ -14,15 +12,20 @@ import { pathToFileURL } from "node:url";
 type Json = Record<string, unknown>;
 
 /** Hostnames that must never appear once the public domain is canonical. */
-const INTERNAL_BACKEND_HOSTS = ["nativenotes.vercel.app"];
+const INTERNAL_BACKEND_HOSTS = [
+  "nativenotes.vercel.app",
+  ...(process.env.NATIVE_NOTES_BACKEND_ORIGIN
+    ? [new URL(process.env.NATIVE_NOTES_BACKEND_ORIGIN).hostname]
+    : []),
+];
 
 async function fetchJson(
   url: string,
-  options?: { redirect?: RequestRedirect },
 ): Promise<{ status: number; body: Json; location?: string | null }> {
   const response = await fetch(url, {
     headers: { accept: "application/json" },
-    redirect: options?.redirect ?? "manual",
+    redirect: "manual",
+    signal: AbortSignal.timeout(15_000),
   });
   const text = await response.text();
   try {
@@ -41,60 +44,11 @@ async function fetchJson(
 }
 
 function fail(message: string): never {
-  console.error(`FAIL: ${message}`);
-  process.exit(1);
+  throw new Error(`FAIL: ${message}`);
 }
 
 function ok(message: string): void {
   console.log(`OK: ${message}`);
-}
-
-function stripWww(hostname: string): string {
-  return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
-}
-
-function isApexWwwPair(left: string, right: string): boolean {
-  try {
-    const a = new URL(left);
-    const b = new URL(right);
-    return (
-      a.protocol === b.protocol && stripWww(a.hostname) === stripWww(b.hostname)
-    );
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Resolve Vercel apex↔www domain redirects before checking metadata.
- * Does not follow redirects to unrelated hosts.
- */
-async function resolvePublicOrigin(requested: URL): Promise<URL> {
-  const probe = await fetch(
-    new URL("/health", requested.origin).toString(),
-    { method: "GET", redirect: "manual", headers: { accept: "application/json" } },
-  );
-
-  if (probe.status >= 300 && probe.status < 400) {
-    const location = probe.headers.get("location");
-    if (!location) {
-      fail(
-        `/health returned ${probe.status} without Location (requested ${requested.origin})`,
-      );
-    }
-    const next = new URL(location, requested.origin);
-    if (!isApexWwwPair(requested.origin, next.origin)) {
-      fail(
-        `/health redirected to unrelated host ${next.origin} (from ${requested.origin})`,
-      );
-    }
-    console.log(
-      `NOTE: ${requested.origin} redirects to ${next.origin} — smoking effective origin`,
-    );
-    return new URL(next.origin);
-  }
-
-  return new URL(requested.origin);
 }
 
 function assertNoInternalBackendOrigin(
@@ -108,25 +62,42 @@ function assertNoInternalBackendOrigin(
   if (!isPublicCustomDomain) return;
 
   const serialized = JSON.stringify(body);
-  for (const host of INTERNAL_BACKEND_HOSTS) {
-    if (serialized.includes(host)) {
-      fail(
-        `${label} exposes internal backend host ${host}; issuer/resource must stay on ${publicHostname}`,
-      );
-    }
+  const internalHost =
+    INTERNAL_BACKEND_HOSTS.find((host) => serialized.includes(host)) ??
+    serialized.match(/[a-z0-9-]+\.vercel\.app/i)?.[0];
+  if (internalHost) {
+    fail(
+      `${label} exposes internal backend host ${internalHost}; issuer/resource must stay on ${publicHostname}`,
+    );
   }
 }
 
 export async function smokeRemote(baseInput: string): Promise<void> {
   const requested = new URL(baseInput);
-  if (requested.protocol !== "https:" && requested.hostname !== "localhost") {
+  if (
+    requested.protocol !== "https:" &&
+    !(requested.protocol === "http:" && requested.hostname === "localhost")
+  ) {
     fail("Smoke target should be an https:// origin (localhost http allowed)");
   }
 
-  const base = await resolvePublicOrigin(requested);
+  if (
+    requested.pathname !== "/" ||
+    requested.search ||
+    requested.hash ||
+    requested.username ||
+    requested.password
+  ) {
+    fail(
+      "Smoke target must be an origin without path, query, fragment, or credentials",
+    );
+  }
+  const base = requested;
   const origin = base.origin;
   const mcpResource = new URL("/mcp", origin).toString();
-  const expectedIssuer = new URL("/api/auth", origin).toString().replace(/\/$/, "");
+  const expectedIssuer = new URL("/api/auth", origin)
+    .toString()
+    .replace(/\/$/, "");
 
   const health = await fetchJson(new URL("/health", origin).toString());
   if (health.status !== 200 || health.body.status !== "ok") {
@@ -135,7 +106,10 @@ export async function smokeRemote(baseInput: string): Promise<void> {
   ok(`GET /health (${origin})`);
 
   const asMeta = await fetchJson(
-    new URL("/api/auth/.well-known/oauth-authorization-server", origin).toString(),
+    new URL(
+      "/api/auth/.well-known/oauth-authorization-server",
+      origin,
+    ).toString(),
   );
   if (asMeta.status !== 200) {
     fail(`authorization server metadata HTTP ${asMeta.status}`);
@@ -146,7 +120,7 @@ export async function smokeRemote(baseInput: string): Promise<void> {
   const issuer = asMeta.body.issuer.replace(/\/$/, "");
   if (issuer !== expectedIssuer) {
     fail(
-      `issuer ${asMeta.body.issuer} does not match effective origin+/api/auth (${expectedIssuer}). Align BETTER_AUTH_URL with the public host Vercel serves (apex vs www).`,
+      `issuer ${asMeta.body.issuer} does not match requested origin+/api/auth (${expectedIssuer}). Align BETTER_AUTH_URL with the canonical public origin.`,
     );
   }
   ok("GET authorization server metadata (issuer matches)");
@@ -157,7 +131,9 @@ export async function smokeRemote(baseInput: string): Promise<void> {
   );
 
   if (asMeta.body.client_id_metadata_document_supported !== true) {
-    fail("authorization server must advertise client_id_metadata_document_supported: true");
+    fail(
+      "authorization server must advertise client_id_metadata_document_supported: true",
+    );
   }
   ok("CIMD advertised (client_id_metadata_document_supported)");
 
@@ -216,7 +192,7 @@ export async function smokeRemote(baseInput: string): Promise<void> {
       const advertisedOrigin = new URL(advertised).origin;
       const issuerOrigin = new URL(issuer).origin;
       if (advertisedOrigin !== issuerOrigin) {
-        detail += `. Split-brain: issuer origin is ${issuerOrigin} but resource origin is ${advertisedOrigin}. Set BETTER_AUTH_URL and MCP_RESOURCE_URL to the same public host (currently Vercel primary is www.nativenotes.app).`;
+        detail += `. Split-brain: issuer origin is ${issuerOrigin} but resource origin is ${advertisedOrigin}. Set BETTER_AUTH_URL and MCP_RESOURCE_URL to the same public host (https://nativenotes.app after cutover).`;
       }
     } catch {
       // keep base detail
@@ -225,13 +201,14 @@ export async function smokeRemote(baseInput: string): Promise<void> {
   }
 
   const authServers = prMeta.body.authorization_servers;
-  if (Array.isArray(authServers) && authServers.length > 0) {
-    const advertisedIssuer = String(authServers[0]).replace(/\/$/, "");
-    if (advertisedIssuer !== expectedIssuer) {
-      fail(
-        `protected resource authorization_servers[0]=${authServers[0]} does not match ${expectedIssuer}`,
-      );
-    }
+  if (
+    !Array.isArray(authServers) ||
+    authServers.length !== 1 ||
+    authServers[0] !== expectedIssuer
+  ) {
+    fail(
+      `protected resource authorization_servers must equal ["${expectedIssuer}"]`,
+    );
   }
   ok("GET protected resource metadata (canonical /mcp)");
   assertNoInternalBackendOrigin(
@@ -240,14 +217,29 @@ export async function smokeRemote(baseInput: string): Promise<void> {
     base.hostname,
   );
 
-  const jwks = await fetchJson(new URL("/api/auth/jwks", origin).toString());
-  if (jwks.status !== 200 || !Array.isArray(jwks.body.keys)) {
+  const expectedJwks = new URL("/api/auth/jwks", origin).toString();
+  if (asMeta.body.jwks_uri !== expectedJwks)
+    fail(`jwks_uri must equal ${expectedJwks}`);
+  for (const field of ["authorization_endpoint", "token_endpoint"]) {
+    const value = asMeta.body[field];
+    if (typeof value !== "string" || new URL(value).origin !== origin) {
+      fail(`${field} must use the canonical public origin`);
+    }
+  }
+  const jwks = await fetchJson(expectedJwks);
+  if (
+    jwks.status !== 200 ||
+    !Array.isArray(jwks.body.keys) ||
+    jwks.body.keys.length === 0
+  ) {
     fail(`JWKS expected keys[], got HTTP ${jwks.status}`);
   }
   ok("GET JWKS");
 
   const mcp = await fetch(mcpResource, {
     method: "POST",
+    redirect: "manual",
+    signal: AbortSignal.timeout(15_000),
     headers: {
       accept: "application/json",
       "content-type": "application/json",
@@ -266,7 +258,32 @@ export async function smokeRemote(baseInput: string): Promise<void> {
   if (!/bearer/i.test(wwwAuth)) {
     fail("anonymous /mcp missing WWW-Authenticate: Bearer challenge");
   }
-  ok("anonymous POST /mcp → 401 Bearer");
+  const metadataMatch = /resource_metadata="([^"]+)"/.exec(wwwAuth);
+  const metadataUrl = metadataMatch?.[1];
+  if (
+    !metadataUrl ||
+    new URL(metadataUrl).origin !== origin ||
+    !new URL(metadataUrl).pathname.startsWith(
+      "/.well-known/oauth-protected-resource",
+    )
+  ) {
+    fail(
+      "MCP Bearer challenge must point to public protected-resource metadata",
+    );
+  }
+  const challengeMetadata = await fetchJson(metadataUrl);
+  if (
+    challengeMetadata.status !== 200 ||
+    challengeMetadata.body.resource !== mcpResource
+  ) {
+    fail("MCP challenge metadata must resolve to the canonical resource");
+  }
+  assertNoInternalBackendOrigin(
+    "MCP challenge metadata",
+    challengeMetadata.body,
+    base.hostname,
+  );
+  ok("anonymous POST /mcp → 401 Bearer (public metadata reachable)");
 
   console.log(`\nSmoke passed for ${origin}`);
   console.log(`Canonical MCP resource: ${mcpResource}`);
@@ -280,7 +297,7 @@ const isDirectRun =
 if (isDirectRun) {
   const target = process.argv[2];
   if (!target) {
-    console.error("Usage: pnpm smoke:remote https://www.nativenotes.app");
+    console.error("Usage: pnpm smoke:remote https://nativenotes.app");
     process.exit(2);
   }
   void smokeRemote(target).catch((error) => {

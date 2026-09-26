@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const TEST_PORT = "3310";
 const TEST_BASE = `http://127.0.0.1:${TEST_PORT}`;
@@ -11,6 +11,9 @@ process.env.MCP_RESOURCE_URL = `${TEST_BASE}/mcp`;
 process.env.TENANT_CLAIM_NAMESPACE = "https://nativenotes.example/claims";
 process.env.NODE_ENV = "test";
 process.env.PORT = TEST_PORT;
+// Test-only Google credentials; provider network exchange is mocked below.
+process.env.GOOGLE_CLIENT_ID = "oauth-lifecycle-test";
+process.env.GOOGLE_CLIENT_SECRET = "oauth-lifecycle-test-secret";
 
 const {
   HARNESS_CLIENT_ID,
@@ -43,9 +46,8 @@ const {
   session,
 } = await import("../src/db/auth-schema.js");
 const { notes, oauthGrantTenant } = await import("../src/db/schema.js");
-const { tenantClaim, env, betterAuthIssuer } = await import(
-  "../src/config/env.js"
-);
+const { tenantClaim, env, betterAuthIssuer } =
+  await import("../src/config/env.js");
 const { migrate } = await import("../src/db/migrate.js");
 
 type Started = Awaited<ReturnType<typeof startNativeNotesServer>>;
@@ -76,9 +78,9 @@ describe("OAuth organization-bound lifecycle", () => {
 
   beforeAll(async () => {
     await migrate();
-    await db.delete(oauthClientResource).where(
-      eq(oauthClientResource.clientId, HARNESS_CLIENT_ID),
-    );
+    await db
+      .delete(oauthClientResource)
+      .where(eq(oauthClientResource.clientId, HARNESS_CLIENT_ID));
     await db
       .delete(oauthClient)
       .where(eq(oauthClient.clientId, HARNESS_CLIENT_ID));
@@ -135,8 +137,21 @@ describe("OAuth organization-bound lifecycle", () => {
     const signed = (await signUp.json()) as { user?: { id?: string } };
     userId = signed.user?.id ?? "";
     expect(userId).toBeTruthy();
+    // Existing linked Google account: account-linking policy is outside this test.
+    await db.insert(account).values({
+      id: randomUUID(),
+      accountId: `google-${runId}`,
+      providerId: "google",
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    });
 
-    const createOrg = async (name: string, slug: string, keepCurrent: boolean) => {
+    const createOrg = async (
+      name: string,
+      slug: string,
+      keepCurrent: boolean,
+    ) => {
       const response = await fetchWithCookies(
         jar,
         `${TEST_BASE}/api/auth/organization/create`,
@@ -182,7 +197,9 @@ describe("OAuth organization-bound lifecycle", () => {
 
   afterAll(async () => {
     if (userId) {
-      await db.delete(notes).where(inArray(notes.id, [noteA, noteB].filter(Boolean)));
+      await db
+        .delete(notes)
+        .where(inArray(notes.id, [noteA, noteB].filter(Boolean)));
       await db
         .delete(oauthGrantTenant)
         .where(eq(oauthGrantTenant.userId, userId));
@@ -198,9 +215,9 @@ describe("OAuth organization-bound lifecycle", () => {
         .where(inArray(organization.id, [orgA, orgB].filter(Boolean)));
       await db.delete(user).where(eq(user.id, userId));
     }
-    await db.delete(oauthClientResource).where(
-      eq(oauthClientResource.clientId, HARNESS_CLIENT_ID),
-    );
+    await db
+      .delete(oauthClientResource)
+      .where(eq(oauthClientResource.clientId, HARNESS_CLIENT_ID));
     await db
       .delete(oauthClient)
       .where(eq(oauthClient.clientId, HARNESS_CLIENT_ID));
@@ -214,6 +231,132 @@ describe("OAuth organization-bound lifecycle", () => {
       `${JSON.stringify(findings, null, 2)}\n`,
     );
   }, 60_000);
+
+  async function signedLoginQuery(
+    loginJar: ReturnType<typeof createCookieJar>,
+  ) {
+    const { createPkcePair, followRedirects } =
+      await import("./oauth-harness.js");
+    const authorize = new URL("/api/auth/oauth2/authorize", TEST_BASE);
+    authorize.search = new URLSearchParams({
+      response_type: "code",
+      client_id: HARNESS_CLIENT_ID,
+      redirect_uri: "http://127.0.0.1/oauth/harness/callback",
+      scope: "openid mcp:read",
+      state: "login-intent-proof",
+      resource: env.MCP_RESOURCE_URL,
+      code_challenge: createPkcePair().challenge,
+      code_challenge_method: "S256",
+    }).toString();
+    const landed = await followRedirects(loginJar, authorize.toString());
+    const login = new URL(landed.url);
+    expect(login.pathname).toBe("/sign-in");
+    expect(login.searchParams.has("sig")).toBe(true);
+    return login.search.slice(1);
+  }
+
+  it("email login with real signed OAuth intent reaches consent before app callback", async () => {
+    const loginJar = createCookieJar();
+    const query = await signedLoginQuery(loginJar);
+    const response = await fetchWithCookies(loginJar, `${TEST_BASE}/sign-in`, {
+      method: "POST",
+      headers: { origin: TEST_BASE },
+      body: new URLSearchParams({
+        email,
+        password,
+        oauth_query: query,
+        callbackURL: `${TEST_BASE}/app`,
+      }),
+    });
+    expect(response.status).toBe(303);
+    expect(new URL(response.headers.get("location")!, TEST_BASE).pathname).toBe(
+      "/oauth/consent",
+    );
+  }, 30_000);
+
+  it.each([false, true])(
+    "Google round trip restores signed OAuth intent=%s",
+    async (isOAuth) => {
+      const { auth } = await import("../src/auth/auth.js");
+      const context = await auth.$context;
+      const google = context.socialProviders.find(
+        (provider) => provider.id === "google",
+      );
+      if (!google) throw new Error("Missing test Google provider");
+      const validate = vi
+        .spyOn(google, "validateAuthorizationCode")
+        .mockResolvedValue({ accessToken: "test-google-token" });
+      const profile = vi.spyOn(google, "getUserInfo").mockResolvedValue({
+        user: {
+          email,
+          emailVerified: true,
+          name: `OAuth User ${runId}`,
+        },
+        data: { sub: `google-${runId}`, email },
+      });
+      try {
+        const loginJar = createCookieJar();
+        const fields: Record<string, string> = isOAuth
+          ? {
+              oauth_query: await signedLoginQuery(loginJar),
+              callbackURL: `${TEST_BASE}/app`,
+            }
+          : {};
+        const start = await fetchWithCookies(
+          loginJar,
+          `${TEST_BASE}/sign-in/google`,
+          {
+            method: "POST",
+            headers: { origin: TEST_BASE },
+            body: new URLSearchParams(fields),
+          },
+        );
+        expect(start.status).toBe(303);
+        const googleUrl = new URL(start.headers.get("location")!);
+        expect(googleUrl.hostname).toBe("accounts.google.com");
+        expect(googleUrl.searchParams.get("redirect_uri")).toBe(
+          `${TEST_BASE}/api/auth/callback/google`,
+        );
+        const state = googleUrl.searchParams.get("state");
+        expect(state).toBeTruthy();
+        const callback = new URL("/api/auth/callback/google", TEST_BASE);
+        callback.search = new URLSearchParams({
+          state: state!,
+          code: "test-google-code",
+        }).toString();
+        const finish = await fetchWithCookies(loginJar, callback, {
+          headers: { accept: "text/html" },
+        });
+        const target = new URL(finish.headers.get("location")!, TEST_BASE);
+        expect(target.searchParams.has("error")).toBe(false);
+        if (isOAuth) {
+          expect(["/api/auth/oauth2/authorize", "/oauth/consent"]).toContain(
+            target.pathname,
+          );
+          const { followRedirects } = await import("./oauth-harness.js");
+          const landed = await followRedirects(loginJar, target.toString());
+          const consent = new URL(landed.url);
+          expect(consent.pathname).toBe("/oauth/consent");
+          expect(consent.searchParams.get("state")).toBe("login-intent-proof");
+          expect(consent.searchParams.get("client_id")).toBe(HARNESS_CLIENT_ID);
+        } else {
+          expect(target.pathname).toBe("/app");
+        }
+        const sessionResponse = await fetchWithCookies(
+          loginJar,
+          `${TEST_BASE}/api/auth/get-session`,
+        );
+        const sessionBody = (await sessionResponse.json()) as {
+          user?: { id: string };
+        };
+        expect(sessionBody.user?.id).toBe(userId);
+      } finally {
+        validate.mockRestore();
+        profile.mockRestore();
+      }
+    },
+    30_000,
+  );
 
   it("A: authorizes for Organization A and scopes note.list", async () => {
     const { code, verifier } = await authorizeForOrganization({
@@ -288,7 +431,8 @@ describe("OAuth organization-bound lifecycle", () => {
       refreshReferenceIds: refreshRows.map((row) => row.referenceId),
       authorizationCodeReferenceIds: authCodeRows.map((row) => {
         try {
-          return (JSON.parse(row.value) as { referenceId?: string }).referenceId;
+          return (JSON.parse(row.value) as { referenceId?: string })
+            .referenceId;
         } catch {
           return null;
         }
@@ -471,9 +615,9 @@ describe("OAuth organization-bound lifecycle", () => {
 
     if (reused.status === 200 && "access_token" in reused.body) {
       expect(
-        decodeAccessToken((reused.body as { access_token: string }).access_token)[
-          tenantClaim
-        ],
+        decodeAccessToken(
+          (reused.body as { access_token: string }).access_token,
+        )[tenantClaim],
       ).toBe(orgA);
     }
 

@@ -52,9 +52,9 @@ describe("backend rewrites", () => {
         destination: "https://nativenotes.vercel.app/health",
       },
     ]);
-    expect(BACKEND_REWRITE_SOURCES.some((s) => s.includes("*") && s === "/*")).toBe(
-      false,
-    );
+    expect(
+      BACKEND_REWRITE_SOURCES.some((s) => s.includes("*") && s === "/*"),
+    ).toBe(false);
     expect(rewrites.every((r) => !r.source.startsWith("/app"))).toBe(true);
   });
 
@@ -85,5 +85,31 @@ describe("config", () => {
     expect(getSignInUrl("/app")).toContain("/sign-in");
     expect(getSignInUrl("/app")).toContain("callbackURL=");
     expect(getSignInUrl("/app")).toContain("%2Fapp");
+  });
+});
+
+describe("rewrite origin validation", () => {
+  test.each([
+    "https://www.nativenotes.app",
+    "https://user:pass@backend.example",
+    "https://backend.example/path",
+    "https://backend.example?x=1",
+    "https://backend.example#x",
+    "ftp://localhost",
+    "file://localhost",
+    "//backend.example",
+    "",
+  ])("rejects invalid or looping origin %s", (origin) => {
+    expect(() => validateBackendOrigin(origin)).toThrow();
+  });
+  test("allows only HTTP loopback in development", () => {
+    expect(validateBackendOrigin("http://localhost:3000")).toBe(
+      "http://localhost:3000",
+    );
+    expect(() =>
+      validateBackendOrigin("http://localhost:3000", {
+        requireProductionHttps: true,
+      }),
+    ).toThrow();
   });
 });

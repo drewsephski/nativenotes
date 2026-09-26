@@ -54,6 +54,8 @@ Computer-use / Grokbot scenarios: [`docs/QA.md`](docs/QA.md).
 
 Public domain: **https://nativenotes.app** (Next.js web project).
 
+The two-project cutover is live. Use **NativeNotes App** in ChatGPT for the canonical MCP connection. See the [deployment validation record](docs/DEPLOYMENT.md#cutover-execution-status--2026-09-26) for automated and browser proof, migration details, and remaining cleanup.
+
 The Node backend remains a separate Vercel project (stable internal hostname such as `https://nativenotes.vercel.app`). It is **not** given the custom domain. The web project proxies backend-owned paths with external rewrites driven by server-only `NATIVE_NOTES_BACKEND_ORIGIN`.
 
 | Browser path | Owner |
@@ -71,7 +73,9 @@ Canonical auth identity (backend env — public domain, not the rewrite target):
 - `TENANT_CLAIM_NAMESPACE=https://nativenotes.app/claims`
 - `TRUSTED_ORIGINS=https://nativenotes.app`
 
-Login intent: `oauth_query` (MCP/ChatGPT) wins over trusted `callbackURL`; otherwise default `/app` (never `/`).
+Login intent: signed `oauth_query` (MCP/ChatGPT) wins over trusted `callbackURL`; otherwise default `/app` (never `/`). Google preserves OAuth state through Better Auth; app callbacks never interrupt MCP consent. Production browser API calls always use the public same origin, even if an old API override remains.
+
+Cutover: deploy compatible backend → register apex Google callback → configure/deploy web and verify rewrites → move apex to web → update backend canonical identity and redeploy → smoke/app/ChatGPT validation → reconnect clients → retire obsolete callbacks. Apex must serve directly; optional www redirects to apex. Existing tokens/sessions may require reauthorization/sign-in.
 
 Full Vercel setup, cutover order, and smoke plan: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#unified-production-routing).
 

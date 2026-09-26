@@ -77,10 +77,6 @@ plugins: [
 
 Server-rendered HTML + CSS design tokens in `src/ui/` (no SPA framework). Pages: `/sign-in`, `/sign-up`, `/oauth/consent`. In production these are reached at `https://nativenotes.app/...` via Next.js external rewrites to the Node backend project. Grokbot anchors and scenarios: `docs/QA.md`.
 
-### Unified production routing
-
-The public surface is the Next.js app (`apps/web`) on `https://nativenotes.app`. The Node MCP/auth backend stays a separate Vercel project. Backend-owned paths are proxied with explicit rewrites (`NATIVE_NOTES_BACKEND_ORIGIN`). Canonical `BETTER_AUTH_URL` / `MCP_RESOURCE_URL` / claim namespace must use the public domain so issuer, PRM, Google callbacks, and ChatGPT MCP config never advertise the private backend hostname. See `docs/DEPLOYMENT.md#unified-production-routing`.
-
 `mcp()` already composes the OAuth Provider behavior. No separate `oauthProvider()` registration is used. `jwt()` is required for the signing keys and JWKS endpoint. The application uses the generated Better Auth Drizzle schema; Better Auth internal tables are not hand-created.
 
 The current MCP plugin API does not expose a global `requirePKCE` option. The installed OAuth Provider metadata advertises `code_challenge_methods_supported: ["S256"]`, and its authorization-code path validates S256 challenges when supplied. The client metadata profile is MCP 2026-07-28 and DCR remains disabled by default.
@@ -298,18 +294,18 @@ For A and B, distinct rows matched user, OAuth client, organization, resource, s
 
 Automated unit/integration tests cover transport boundaries, grant identity, membership checks, and tenant-scoped listing. `pnpm test:oauth` proves the interactive authorization-code + PKCE lifecycle against the Neon test database (`TEST_DATABASE_URL`), including A/B independent grants, active-org drift, membership revocation, and refresh reuse.
 
-### Production deploy + remote smoke (2026-09-26)
+### Initial production deploy + remote smoke (historical, 2026-09-26)
 
-- Deployed to Vercel (`nativenotes`, Node `server.ts`) at `https://nativenotes.vercel.app`.
+- Deployed to Vercel (`nativenotes`, Node `server.ts`) at the internal backend deployment hostname.
 - Neon production branch migrated explicitly (unpooled); Better Auth + app tables present; no drift vs local journal (`0000`, `0001`).
-- `pnpm smoke:remote https://nativenotes.vercel.app` passed (health, AS metadata issuer, PRM resource, JWKS, anonymous `/mcp` 401).
+- Remote smoke against the then-public backend hostname passed (health, AS metadata issuer, PRM resource, JWKS, anonymous `/mcp` 401).
 - Production metadata advertises CIMD (`client_id_metadata_document_supported: true`) and does **not** advertise a registration endpoint; probe `POST …/oauth2/register` returns `403 Client registration is disabled`.
 
 ### Production MCP interoperability proof (Cursor) — rejected path
 
 Preferred first client was Cursor. Official Cursor MCP docs describe remote OAuth via **Dynamic Client Registration** or **static `auth.CLIENT_ID` / optional secret**, with fixed redirect URIs `https://www.cursor.com/agents/mcp/oauth/callback` and `http://localhost:8787/callback`. Cursor staff state CIMD is not supported and has no published timeline ([forum](https://forum.cursor.com/t/mcp-oauth-cimd-support-plans-and-timelines/148096)).
 
-NativeNotes was configured in Cursor `mcp.json` as a URL-only remote entry (`https://nativenotes.vercel.app/mcp`) with **no** static client and **no** DCR enablement. A complete CIMD consent → tenant grant → refresh → membership revocation loop was **not** completed, because the client cannot present a CIMD `client_id` metadata document URL.
+NativeNotes was configured in Cursor `mcp.json` as a URL-only remote entry (the then-public backend MCP endpoint) with **no** static client and **no** DCR enablement. A complete CIMD consent → tenant grant → refresh → membership revocation loop was **not** completed, because the client cannot present a CIMD `client_id` metadata document URL.
 
 **Stop condition hit for Cursor:** do not enable DCR; do not seed a static client. ChatGPT is the preferred CIMD interoperability target instead.
 
@@ -327,11 +323,11 @@ Verified against current OpenAI docs ([plugins auth](https://developers.openai.c
 - Stable CIMD when issuer identification is met: `https://chatgpt.com/oauth/client.json` with redirect `https://chatgpt.com/connector_platform_oauth_redirect`
 - Otherwise callback-specific: `https://chatgpt.com/oauth/{callback_id}/client.json` and `https://chatgpt.com/connector/oauth/{callback_id}`
 
-### NativeNotes production metadata audit
+### NativeNotes production metadata audit (canonical cutover)
 
 | Field | Production value | ChatGPT expectation |
 | --- | --- | --- |
-| `issuer` | `https://nativenotes.vercel.app/api/auth` | Must match PRM `authorization_servers[0]` |
+| `issuer` | `https://nativenotes.app/api/auth` | Must match PRM `authorization_servers[0]` |
 | `authorization_endpoint` | `…/api/auth/oauth2/authorize` | Present |
 | `token_endpoint` | `…/api/auth/oauth2/token` | Present |
 | `jwks_uri` | `…/api/auth/jwks` | Present (EdDSA OKP key) |
@@ -341,14 +337,14 @@ Verified against current OpenAI docs ([plugins auth](https://developers.openai.c
 | `token_endpoint_auth_methods_supported` | includes `none`, `private_key_jwt` | Intersection with ChatGPT CIMD |
 | `scopes_supported` | includes `openid`, `offline_access`, `mcp:read`, … | ChatGPT may request advertised OIDC scopes |
 | `registration_endpoint` | **absent** | DCR stays disabled |
-| PRM `resource` | `https://nativenotes.vercel.app/mcp` | Exact `resource=` value |
-| PRM `authorization_servers` | `["https://nativenotes.vercel.app/api/auth"]` | Exact issuer match |
+| PRM `resource` | `https://nativenotes.app/mcp` | Exact `resource=` value |
+| PRM `authorization_servers` | `["https://nativenotes.app/api/auth"]` | Exact issuer match |
 
 ### RFC 9207 findings (Better Auth 1.7.6)
 
 - Metadata advertises `authorization_response_iss_parameter_supported: true` (not faked).
 - Source (`@better-auth/oauth-provider`): successful code redirects set `iss` via `getIssuer()`; error redirects to the client `redirect_uri` pass `iss` into `formatErrorURL` (access_denied, invalid_scope, PKCE failures, query validation, etc.).
-- Issuer string equals `https://nativenotes.vercel.app/api/auth` with no trailing-slash mismatch vs PRM.
+- Issuer string equals `https://nativenotes.app/api/auth` with no trailing-slash mismatch vs PRM.
 - Therefore ChatGPT should use the **stable** CIMD/callback pair, not callback-id mode.
 
 ### ChatGPT CIMD metadata (live)
@@ -380,7 +376,7 @@ OpenAI: when the singular CIMD preference is in the intersection, ChatGPT uses i
 ### ChatGPT connection procedure
 
 1. Enable ChatGPT Developer Mode (Business/Enterprise admin settings).
-2. Create custom MCP app / connector pointing at `https://nativenotes.vercel.app/mcp`, authentication **OAuth**, prefer **CIMD** (do not choose DCR).
+2. Create custom MCP app / connector pointing at `https://nativenotes.app/mcp`, authentication **OAuth**, prefer **CIMD** (do not choose DCR).
 3. Confirm management UI shows stable CIMD `https://chatgpt.com/oauth/client.json` and redirect `https://chatgpt.com/connector_platform_oauth_redirect` (expected because RFC 9207 is advertised and implemented).
 4. Sign in on NativeNotes (Google preferred, email/password fallback) → create/select Organization A on `/oauth/consent` → approve.
 5. Allow ChatGPT tool scan → invoke `note.list`.
@@ -418,3 +414,25 @@ Remaining risks:
 - Auth failure responses intentionally return machine-readable JSON without stack traces; operators should rely on server logs for unexpected failures.
 - Canonical public origin is `https://nativenotes.app` (Next.js + rewrites). Updating `BETTER_AUTH_URL`, `MCP_RESOURCE_URL`, and `TENANT_CLAIM_NAMESPACE` must happen together when rotating the public domain; the backend rewrite hostname must never become the issuer.
 - Interactive ChatGPT Org A / refresh / membership / Org B proofs require a Developer Mode workspace and redeploy of consent/logging/tool-metadata changes.
+
+## Unified production routing
+
+The Next.js project (`apps/web`) owns **https://nativenotes.app**. The independently deployable root Node project remains the auth/MCP/notes implementation. An explicit external rewrite map proxies sign-in/up/Google, consent, auth API, notes API, well-known metadata, MCP, and health; Next owns the landing page, `/app`, and assets. Server-only `NATIVE_NOTES_BACKEND_ORIGIN` targets the stable backend Vercel hostname, never the public domain.
+
+Backend canonical identity is `BETTER_AUTH_URL=https://nativenotes.app`, `MCP_RESOURCE_URL=https://nativenotes.app/mcp`, `TENANT_CLAIM_NAMESPACE=https://nativenotes.app/claims`, `TRUSTED_ORIGINS=https://nativenotes.app`. Earlier backend/www snapshots above are historical. Google must allow `https://nativenotes.app/api/auth/callback/google`; keep the old backend callback temporarily, then remove after green.
+
+App-login intent: a trusted callback returns to the web app; absent/untrusted callbacks default to `/app`. MCP-login intent: signed `oauth_query` takes precedence over callbackURL. Email forwards it to Better Auth without an app callback. Google forwards it unchanged into Better Auth's signed OAuth serverContext, which the provider restores on `/api/auth/callback/google`. The social fallback also targets authorize when OAuth intent is present, never `/app`. Ordinary email response URLs cannot override the trusted callback resolver. Callback origins remain exactly restricted to trustedOrigins; credentials in callback URLs are rejected.
+
+Cutover order: deploy compatible backend → register apex Google callback → create/configure/deploy web → verify preview rewrites → move apex to web → update all backend canonical values and redeploy → smoke → exercise app and ChatGPT separately → reconnect ChatGPT → remove old callback/config only after green. Full setup and cookie/CORS/rollback checks: [DEPLOYMENT.md](DEPLOYMENT.md#unified-production-routing). The issuer migration is not atomic and requires client reconnection; no old-audience acceptance is introduced.
+
+Tests cover route-level email/Google intent and cookies plus existing OAuth/MCP tenant invariants. The database-backed lifecycle also exercises signed email OAuth continuation and Google state/callback restoration with only the upstream Google token/profile calls mocked. This is not live Google or ChatGPT completion proof; record actual production interactive results separately.
+
+### Unified-origin live proof — 2026-09-26
+
+The public apex cutover is deployed. Strict remote smoke passes with issuer `https://nativenotes.app/api/auth`, resource `https://nativenotes.app/mcp`, reachable JWKS, and anonymous MCP 401. Google app login, direct sign-in fallback, logout/login, workspace selection, note reads, and note creation were exercised in Dia.
+
+ChatGPT's old connector retained the old backend URL/metadata, so a canonical replacement named **NativeNotes App** was connected to `https://nativenotes.app/mcp`. Live Google callback continued to consent (not `/app`); consent submission and redirect were followed by a successful token exchange and authenticated MCP discovery/tool listing and a successful `tools/call` (HTTP 200). Token claim diagnostics showed the public issuer/resource and selected workspace. ChatGPT then confirmed the labeled production smoke note via a read-only request: [List Note Existence](https://chatgpt.com/c/6ab8148c-30b0-83ea-a130-7c8c2b07304d).
+
+Consent completed while browser validation was in progress; server lifecycle logs establish the callback/consent/token sequence. This is live completion proof, separate from the mocked upstream Google lifecycle tests. Live refresh/organization-drift and membership-revocation exercises remain separate follow-up checks; existing automated tenant-invariant tests pass. Email login is verified by automated route/lifecycle tests, not a live user password submission.
+
+The production `notes.version` schema mismatch discovered during QA was resolved by applying the existing additive `0002_previous_kingpin.sql` migration with explicit user approval. No note-editing code was implemented for this routing task. The full deployment IDs, configuration, and rollback steps are in [DEPLOYMENT.md](DEPLOYMENT.md#cutover-execution-status--2026-09-26).

@@ -135,6 +135,25 @@ describe("workspace selector", () => {
       });
     });
   });
+
+  test("a fresh session can select its first workspace", async () => {
+    mockUseActiveOrganization.mockReturnValue({
+      data: null,
+      isPending: false,
+      error: null,
+      refetch: mockRefetchActive,
+    });
+    const user = userEvent.setup();
+    render(<WorkspaceSelector />);
+
+    await user.click(screen.getByRole("button", { name: "Workspace: Select workspace" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Personal" }));
+
+    await waitFor(() => {
+      expect(mockSetActive).toHaveBeenCalledWith({ organizationId: "org_1" });
+      expect(mockRefetchActive).toHaveBeenCalled();
+    });
+  });
 });
 
 describe("zero-org onboarding", () => {

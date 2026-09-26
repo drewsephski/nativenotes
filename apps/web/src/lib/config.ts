@@ -8,9 +8,6 @@
  * production — cookies and OAuth must stay on the public domain.
  */
 export function getNativeNotesApiUrl(): string {
-  const configured = process.env.NEXT_PUBLIC_NATIVE_NOTES_API_URL?.trim();
-  if (configured) return configured.replace(/\/$/, "");
-
   if (process.env.NODE_ENV === "production") {
     if (typeof window !== "undefined") {
       return window.location.origin;
@@ -20,7 +17,8 @@ export function getNativeNotesApiUrl(): string {
     return "https://nativenotes.app";
   }
 
-  return "http://localhost:3000";
+  const configured = process.env.NEXT_PUBLIC_NATIVE_NOTES_API_URL?.trim();
+  return configured?.replace(/\/$/, "") || "http://localhost:3000";
 }
 
 /**
