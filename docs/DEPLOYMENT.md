@@ -139,18 +139,19 @@ Checks (no secrets):
 
 ## Production MCP interoperability proof
 
-Recorded against the first production deploy (2026-09-26). No secrets or raw tokens are included.
+Recorded against production (`https://nativenotes.vercel.app`). No secrets or raw tokens are included.
 
 | Item | Value |
 | --- | --- |
-| Canonical domain | `https://nativenotes.vercel.app` (no NativeNotes custom domain available yet; production alias, not a one-off preview URL) |
-| Vercel deployment model | Root `server.ts` Node entrypoint, Fluid/serverless, `maxDuration: 60`, framework `node`, region `iad1` |
-| Neon production branch | `production` (`br-crimson-block-b44lqkup`, endpoint `ep-sweet-queen-b4k8s6wq`); migrations applied via direct/unpooled URL; test branch `test` / `ep-nameless-glade` untouched |
-| Client tested | Cursor (preferred first client) |
-| CIMD discovery | **Blocked by client.** NativeNotes advertises `client_id_metadata_document_supported: true` and keeps DCR disabled (`POST /api/auth/oauth2/register` → `403` `Client registration is disabled`). Cursor documents OAuth via **DCR or static `auth.CLIENT_ID`** only; staff confirmed CIMD has no timeline ([forum thread](https://forum.cursor.com/t/mcp-oauth-cimd-support-plans-and-timelines/148096); [Cursor MCP docs](https://cursor.com/docs/mcp)) |
-| OAuth result | Not completed with Cursor. Stopped before enabling DCR or switching clients |
-| Tenant binding / refresh / revocation | Not exercised on production with a real client (local `pnpm test:oauth` still covers these against the Neon **test** branch) |
-| Known client quirks | Cursor redirect URIs (when static OAuth is used): `https://www.cursor.com/agents/mcp/oauth/callback`, `http://localhost:8787/callback`. Cursor expects DCR or pre-registered credentials; it does not fetch CIMD client metadata documents |
+| Canonical domain | `https://nativenotes.vercel.app` |
+| Vercel deployment model | Root `server.ts` Node entrypoint, Fluid/serverless, `maxDuration: 60` |
+| Preferred client | **ChatGPT** (CIMD). Cursor rejected: DCR/static-client only |
+| CIMD discovery | NativeNotes advertises `client_id_metadata_document_supported: true`; DCR remains disabled |
+| ChatGPT stable CIMD | `https://chatgpt.com/oauth/client.json` (expected with RFC 9207 support) |
+| ChatGPT redirect | `https://chatgpt.com/connector_platform_oauth_redirect` |
+| Token auth expectation | Intersection `none` ∪ `private_key_jwt`; ChatGPT singular preference → **`private_key_jwt`** |
+| PKCE | S256 required and advertised |
+| Resource / audience | `https://nativenotes.vercel.app/mcp` |
 
 ### Production discovery snapshot (actual)
 
@@ -162,6 +163,8 @@ Authorization server (`GET /api/auth/.well-known/oauth-authorization-server`):
 - `jwks_uri`: `…/api/auth/jwks`
 - `code_challenge_methods_supported`: `["S256"]`
 - `client_id_metadata_document_supported`: `true`
+- `authorization_response_iss_parameter_supported`: `true`
+- `token_endpoint_auth_methods_supported`: includes `none`, `private_key_jwt`
 - `grant_types_supported`: includes `authorization_code`, `refresh_token`
 - `scopes_supported`: `openid`, `offline_access`, `mcp:read`, `mcp:write`, `mcp:instructions`, `mcp:admin`
 - `registration_endpoint`: absent (DCR disabled)
@@ -174,9 +177,21 @@ Protected resource (`GET /.well-known/oauth-protected-resource`):
 
 Anonymous `POST /mcp` returns `401` with `WWW-Authenticate: Bearer resource_metadata="https://nativenotes.vercel.app/.well-known/oauth-protected-resource/mcp"`.
 
-### Stop decision
+### ChatGPT setup checklist
 
-Do **not** enable DCR to unblock Cursor. Do **not** seed a static OAuth client as a silent security downgrade without an explicit product decision. Next interoperability client should be one that already speaks CIMD (for example VS Code or Claude Desktop/Code), after an explicit go-ahead.
+1. `pnpm smoke:remote https://nativenotes.vercel.app`
+2. `pnpm validate:chatgpt-cimd`
+3. ChatGPT Developer Mode → custom MCP → `https://nativenotes.vercel.app/mcp` → OAuth/CIMD (not DCR)
+4. NativeNotes sign-in → consent → create/select Organization A
+5. `pnpm seed:proof-notes <orgAId> [orgBId]`
+6. ChatGPT tool scan → `note.list`
+7. Prove refresh tenant stickiness, membership removal 403, optional Org B reconnect
+
+See [`docs/AUTH-SPIKE.md`](AUTH-SPIKE.md#chatgpt-interoperability-proof) for the full matrix and interactive status.
+
+### Cursor (rejected)
+
+Do **not** enable DCR to unblock Cursor. Do **not** seed a static OAuth client. Cursor remains incompatible with the CIMD-only policy.
 
 ## Rollback considerations
 

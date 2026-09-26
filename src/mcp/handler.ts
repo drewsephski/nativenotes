@@ -51,12 +51,32 @@ function authFailureResponse(error: unknown): Response {
   );
 }
 
+async function mcpMethodName(request: Request): Promise<string | undefined> {
+  try {
+    const cloned = request.clone();
+    const body = (await cloned.json()) as { method?: unknown };
+    return typeof body.method === "string" ? body.method : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const protectedMcpHandler = requireMcpAuth(
   auth,
   async (request, claims) => {
     try {
       const context = await auth.$context;
       const authContext = await buildAuthContext(claims, context.adapter);
+      const method = await mcpMethodName(request);
+      console.info("[mcp]", {
+        method,
+        clientId:
+          typeof claims.client_id === "string" ? claims.client_id : undefined,
+        organizationId: authContext.tenantId,
+        issuer: typeof claims.iss === "string" ? claims.iss : undefined,
+        audience: claims.aud,
+        scopes: authContext.scopes,
+      });
       const authInfo: AuthInfo = {
         token: bearerToken(request),
         clientId:
@@ -69,7 +89,15 @@ export const protectedMcpHandler = requireMcpAuth(
 
       return mcpHandler.fetch(request, { authInfo });
     } catch (error) {
-      if (error instanceof ForbiddenError) return authFailureResponse(error);
+      if (error instanceof ForbiddenError) {
+        console.info("[mcp]", {
+          stage: "membership_rejected",
+          clientId:
+            typeof claims.client_id === "string" ? claims.client_id : undefined,
+          reason: error.message,
+        });
+        return authFailureResponse(error);
+      }
       if (
         error instanceof Error &&
         error.message.includes("missing required NativeNotes claims")

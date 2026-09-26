@@ -277,18 +277,114 @@ Automated unit/integration tests cover transport boundaries, grant identity, mem
 - `pnpm smoke:remote https://nativenotes.vercel.app` passed (health, AS metadata issuer, PRM resource, JWKS, anonymous `/mcp` 401).
 - Production metadata advertises CIMD (`client_id_metadata_document_supported: true`) and does **not** advertise a registration endpoint; probe `POST …/oauth2/register` returns `403 Client registration is disabled`.
 
-### Production MCP interoperability proof (Cursor)
+### Production MCP interoperability proof (Cursor) — rejected path
 
 Preferred first client was Cursor. Official Cursor MCP docs describe remote OAuth via **Dynamic Client Registration** or **static `auth.CLIENT_ID` / optional secret**, with fixed redirect URIs `https://www.cursor.com/agents/mcp/oauth/callback` and `http://localhost:8787/callback`. Cursor staff state CIMD is not supported and has no published timeline ([forum](https://forum.cursor.com/t/mcp-oauth-cimd-support-plans-and-timelines/148096)).
 
 NativeNotes was configured in Cursor `mcp.json` as a URL-only remote entry (`https://nativenotes.vercel.app/mcp`) with **no** static client and **no** DCR enablement. A complete CIMD consent → tenant grant → refresh → membership revocation loop was **not** completed, because the client cannot present a CIMD `client_id` metadata document URL.
 
-**Stop condition hit:** do not enable DCR; do not switch clients in this task; report Cursor incompatibility clearly. Full production grant/refresh/revocation proof remains pending a CIMD-capable client.
+**Stop condition hit for Cursor:** do not enable DCR; do not seed a static client. ChatGPT is the preferred CIMD interoperability target instead.
+
+## ChatGPT interoperability proof
+
+Verified against current OpenAI docs ([plugins auth](https://developers.openai.com/plugins/build/auth)) and live production metadata on 2026-09-26. No secrets.
+
+### OpenAI requirements (current)
+
+- Protected resource metadata + `WWW-Authenticate` resource challenge
+- Authorization server metadata with `client_id_metadata_document_supported: true`, PKCE `S256`, and token auth methods ChatGPT can use (`none` and/or `private_key_jwt`)
+- Echo `resource` on authorize + token; bind into access-token audience
+- RFC 9207 issuer identification: advertise `authorization_response_iss_parameter_supported: true` and return matching `iss` on success **and** error authorization redirects to unlock the stable ChatGPT callback / CIMD URL
+- Prefer CIMD over DCR; do not require DCR when CIMD is chosen
+- Stable CIMD when issuer identification is met: `https://chatgpt.com/oauth/client.json` with redirect `https://chatgpt.com/connector_platform_oauth_redirect`
+- Otherwise callback-specific: `https://chatgpt.com/oauth/{callback_id}/client.json` and `https://chatgpt.com/connector/oauth/{callback_id}`
+
+### NativeNotes production metadata audit
+
+| Field | Production value | ChatGPT expectation |
+| --- | --- | --- |
+| `issuer` | `https://nativenotes.vercel.app/api/auth` | Must match PRM `authorization_servers[0]` |
+| `authorization_endpoint` | `…/api/auth/oauth2/authorize` | Present |
+| `token_endpoint` | `…/api/auth/oauth2/token` | Present |
+| `jwks_uri` | `…/api/auth/jwks` | Present (EdDSA OKP key) |
+| `code_challenge_methods_supported` | `["S256"]` | Required |
+| `client_id_metadata_document_supported` | `true` | Required for CIMD path |
+| `authorization_response_iss_parameter_supported` | `true` | Required for stable callback |
+| `token_endpoint_auth_methods_supported` | includes `none`, `private_key_jwt` | Intersection with ChatGPT CIMD |
+| `scopes_supported` | includes `openid`, `offline_access`, `mcp:read`, … | ChatGPT may request advertised OIDC scopes |
+| `registration_endpoint` | **absent** | DCR stays disabled |
+| PRM `resource` | `https://nativenotes.vercel.app/mcp` | Exact `resource=` value |
+| PRM `authorization_servers` | `["https://nativenotes.vercel.app/api/auth"]` | Exact issuer match |
+
+### RFC 9207 findings (Better Auth 1.7.6)
+
+- Metadata advertises `authorization_response_iss_parameter_supported: true` (not faked).
+- Source (`@better-auth/oauth-provider`): successful code redirects set `iss` via `getIssuer()`; error redirects to the client `redirect_uri` pass `iss` into `formatErrorURL` (access_denied, invalid_scope, PKCE failures, query validation, etc.).
+- Issuer string equals `https://nativenotes.vercel.app/api/auth` with no trailing-slash mismatch vs PRM.
+- Therefore ChatGPT should use the **stable** CIMD/callback pair, not callback-id mode.
+
+### ChatGPT CIMD metadata (live)
+
+Fetched `https://chatgpt.com/oauth/client.json`:
+
+- `client_id`: `https://chatgpt.com/oauth/client.json`
+- `client_name`: `ChatGPT`
+- `redirect_uris`: `["https://chatgpt.com/connector_platform_oauth_redirect"]`
+- `grant_types`: `authorization_code`, `refresh_token`
+- `response_types`: `code`
+- `token_endpoint_auth_method`: `private_key_jwt` (singular preference)
+- `token_endpoint_auth_methods_supported`: `["none", "private_key_jwt"]`
+- `token_endpoint_auth_signing_alg`: `RS256`
+- `jwks_uri`: `https://chatgpt.com/oauth/jwks.json` (live RSA JWKS present)
+
+`pnpm validate:chatgpt-cimd` fetches that URL through `@better-auth/cimd/node` (SSRF-protected) and runs `validateCimdMetadata(..., { metadataProfile: "mcp-2026-07-28" })`. Do not bypass SSRF protection.
+
+### Token endpoint auth intersection
+
+| Party | Methods |
+| --- | --- |
+| NativeNotes AS | `none`, `client_secret_basic`, `client_secret_post`, `private_key_jwt` |
+| ChatGPT CIMD | `none`, `private_key_jwt` |
+| Intersection | `none`, `private_key_jwt` |
+
+OpenAI: when the singular CIMD preference is in the intersection, ChatGPT uses it. Singular preference is `private_key_jwt`, so **expected ChatGPT token auth is `private_key_jwt`** (not `none`). Better Auth CIMD accepts `private_key_jwt` with `jwks_uri` and verifies assertions. NativeNotes does not require adding private_key_jwt support; it is already advertised and implemented by Better Auth. DPoP algs are advertised; ChatGPT does not require DPoP for this CIMD path.
+
+### ChatGPT connection procedure
+
+1. Enable ChatGPT Developer Mode (Business/Enterprise admin settings).
+2. Create custom MCP app / connector pointing at `https://nativenotes.vercel.app/mcp`, authentication **OAuth**, prefer **CIMD** (do not choose DCR).
+3. Confirm management UI shows stable CIMD `https://chatgpt.com/oauth/client.json` and redirect `https://chatgpt.com/connector_platform_oauth_redirect` (expected because RFC 9207 is advertised and implemented).
+4. Sign in on NativeNotes → create/select Organization A on `/oauth/consent` → approve.
+5. Allow ChatGPT tool scan → invoke `note.list`.
+
+Consent UI can create organizations when none exist (auth-surface bootstrap for org-bound grants; not a notes product feature). Seed tenant notes with `pnpm seed:proof-notes <orgAId> [orgBId]` after orgs exist.
+
+### Interactive proof status
+
+| Step | Status |
+| --- | --- |
+| Metadata / CIMD / RFC 9207 / smoke | Verified (production + `pnpm validate:chatgpt-cimd`) |
+| Production redeploy with consent org bootstrap + safe `[oauth]`/`[mcp]` logs + clearer `note.list` description | Deployed to `https://nativenotes.vercel.app` |
+| ChatGPT authorize → Org A consent → `note.list` | **Blocked on interactive ChatGPT login** (Developer Mode / Business or Enterprise). Agent reached ChatGPT login wall only. |
+| Active-org drift refresh stays Org A | Pending interactive session (inspect `oauth_refresh_token.reference_id` / `oauth_grant_tenant` if refresh is opaque) |
+| Membership removal → 403 | Pending interactive session |
+| Independent Org B grant | Pending (document ChatGPT single-connector UI limit if present) |
+
+Safe temporary logs (no tokens/codes/secrets): `[oauth]` stages (`consent_page`, `organization_created`, `consent_submit`, `consent_redirect` with `hasIss`) and `[mcp]` (`method`, `clientId`, `organizationId`, `issuer`, `audience`, `scopes`).
+
+### Tool scan (`note.list`)
+
+- Name: `note.list`
+- Description emphasizes read-only, empty args, tenant from token only
+- Output: structured JSON `{ notes: [{ id, title, body, createdAt, updatedAt }] }`
+- No OpenAI-proprietary MCP metadata added
 
 Remaining risks:
 
 - CIMD clients need a public (non-loopback) metadata URL; production uses `@better-auth/cimd/node` to fetch those safely.
 - Cursor (and any DCR-only client) cannot complete the intended remote CIMD flow until the client supports CIMD or product policy explicitly allows a different client-registration strategy.
+- ChatGPT may prefer `private_key_jwt` over `none`; assertion verification depends on Better Auth fetching ChatGPT JWKS through the same protected transport.
 - Authorization-code `referenceId` is only inspectable before code exchange.
 - Auth failure responses intentionally return machine-readable JSON without stack traces; operators should rely on server logs for unexpected failures.
 - `nativenotes.vercel.app` is the interim canonical issuer/resource; attaching a custom domain requires updating `BETTER_AUTH_URL`, `MCP_RESOURCE_URL`, and `TENANT_CLAIM_NAMESPACE` together and redeploying.
+- Interactive ChatGPT Org A / refresh / membership / Org B proofs require a Developer Mode workspace and redeploy of consent/logging/tool-metadata changes.

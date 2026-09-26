@@ -38,7 +38,8 @@ export function createMcpServer(authContext: AuthContext): McpServer {
     "note.list",
     {
       title: "List notes",
-      description: "List notes belonging to the authenticated organization.",
+      description:
+        "Read-only. Lists notes for the organization bound to this OAuth access token. Takes no arguments; tenant authority comes only from the verified token, never from tool input.",
       inputSchema: z.object({}),
       outputSchema: z.object({ notes: z.array(noteOutput) }),
     },

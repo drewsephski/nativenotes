@@ -17,6 +17,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "smoke:remote": "tsx scripts/smoke-remote.ts",
+    "validate:chatgpt-cimd": "tsx scripts/validate-chatgpt-cimd.ts",
+    "seed:proof-notes": "tsx scripts/seed-proof-notes.ts",
     "auth:generate": "pnpm dlx auth@1.7.6 generate --config src/auth/schema-cli.ts --adapter drizzle --dialect postgresql --output src/db/auth-schema.ts --yes"
   },
   "dependencies": {

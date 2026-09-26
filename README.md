@@ -65,6 +65,11 @@ Current production origin: `https://nativenotes.vercel.app` (canonical until a c
 
 Remote smoke: `pnpm smoke:remote https://nativenotes.vercel.app`.
 
-**CIMD / Cursor:** NativeNotes is CIMD-only (DCR disabled). Cursor currently supports MCP OAuth via DCR or static client credentials, not CIMD. Production interoperability with Cursor is blocked until Cursor ships CIMD or a different CIMD-capable client is chosen. Details: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#production-mcp-interoperability-proof).
+**CIMD clients:** NativeNotes is CIMD-only (DCR disabled). **ChatGPT** is the preferred interoperability target (stable CIMD at `https://chatgpt.com/oauth/client.json`). Cursor currently supports MCP OAuth via DCR or static client credentials, not CIMD, and was correctly rejected. Details: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#production-mcp-interoperability-proof) and [`docs/AUTH-SPIKE.md`](docs/AUTH-SPIKE.md#chatgpt-interoperability-proof).
+
+```sh
+pnpm validate:chatgpt-cimd   # SSRF-safe CIMD fetch + MCP 2026-07-28 validation
+pnpm seed:proof-notes <orgAId> [orgBId]   # optional tenant notes for ChatGPT note.list
+```
 
 Details: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). Auth spike notes: [`docs/AUTH-SPIKE.md`](docs/AUTH-SPIKE.md).

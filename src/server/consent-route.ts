@@ -13,6 +13,14 @@ type OrganizationApi = {
     headers: Headers;
     body: { organizationId: string };
   }): Promise<unknown>;
+  createOrganization(input: {
+    headers: Headers;
+    body: {
+      name: string;
+      slug: string;
+      keepCurrentActiveOrganization?: boolean;
+    };
+  }): Promise<Organization>;
 };
 
 const organizationApi = auth.api as unknown as OrganizationApi;
@@ -48,6 +56,52 @@ function writeHtml(
   response.end(`<!doctype html><html><body>${html}</body></html>`);
 }
 
+function clientIdFromOAuthQuery(oauthQuery: string): string | undefined {
+  try {
+    const params = new URLSearchParams(oauthQuery);
+    const clientId = params.get("client_id");
+    return clientId ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function scopesFromOAuthQuery(oauthQuery: string): string | undefined {
+  try {
+    return new URLSearchParams(oauthQuery).get("scope") ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function slugifyOrganizationName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return slug.length > 0 ? slug : `org-${Date.now()}`;
+}
+
+function renderConsentPage(input: {
+  organizations: Organization[];
+  oauthQuery: string;
+  message?: string;
+}): string {
+  const oauthQueryField = `<input type="hidden" name="oauth_query" value="${escapeHtml(input.oauthQuery)}">`;
+  if (input.organizations.length === 0) {
+    return `<h1>Approve NativeNotes access</h1><p>Create an organization to bind this OAuth grant. The selected organization becomes the permanent tenant for this client grant.</p>${input.message ? `<p>${escapeHtml(input.message)}</p>` : ""}<form method="post"><input type="hidden" name="action" value="create_organization">${oauthQueryField}<label>Organization name <input name="organization_name" required maxlength="80" value="Organization A"></label><button type="submit">Create organization</button></form>`;
+  }
+
+  const choices = input.organizations
+    .map(
+      (organization) =>
+        `<option value="${escapeHtml(organization.id)}">${escapeHtml(organization.name)}</option>`,
+    )
+    .join("");
+  return `<h1>Approve NativeNotes access</h1><p>Select the organization this OAuth grant will be permanently bound to.</p>${input.message ? `<p>${escapeHtml(input.message)}</p>` : ""}<form method="post"><input type="hidden" name="action" value="approve">${oauthQueryField}<label>Organization <select name="organization_id" required>${choices}</select></label><input type="hidden" name="accept" value="true"><button type="submit">Continue</button></form><hr><form method="post"><input type="hidden" name="action" value="create_organization">${oauthQueryField}<label>Or create another organization <input name="organization_name" required maxlength="80" placeholder="Organization B"></label><button type="submit">Create</button></form>`;
+}
+
 export async function handleConsentRoute(
   request: IncomingMessage,
   response: ServerResponse,
@@ -70,16 +124,16 @@ export async function handleConsentRoute(
     const oauthQuery = url.search.startsWith("?")
       ? url.search.slice(1)
       : url.search;
-    const choices = organizations
-      .map(
-        (organization) =>
-          `<option value="${escapeHtml(organization.id)}">${escapeHtml(organization.name)}</option>`,
-      )
-      .join("");
+    console.info("[oauth]", {
+      stage: "consent_page",
+      clientId: clientIdFromOAuthQuery(oauthQuery),
+      scopes: scopesFromOAuthQuery(oauthQuery),
+      organizationCount: organizations.length,
+    });
     writeHtml(
       response,
       200,
-      `<h1>Approve NativeNotes access</h1><p>Select the organization this OAuth grant will be permanently bound to.</p><form method="post"><label>Organization <select name="organization_id" required>${choices}</select></label><input type="hidden" name="oauth_query" value="${escapeHtml(oauthQuery)}"><input type="hidden" name="accept" value="true"><button type="submit">Continue</button></form>`,
+      renderConsentPage({ organizations, oauthQuery }),
     );
     return;
   }
@@ -91,6 +145,55 @@ export async function handleConsentRoute(
   }
 
   const body = await readBody(request);
+  const oauthQuery = body.oauth_query ?? "";
+
+  if (body.action === "create_organization") {
+    const name = body.organization_name?.trim();
+    if (!name) {
+      writeHtml(response, 400, "<h1>Organization name required</h1>");
+      return;
+    }
+    let created: Organization;
+    try {
+      created = await organizationApi.createOrganization({
+        headers,
+        body: {
+          name,
+          slug: `${slugifyOrganizationName(name)}-${Date.now().toString(36)}`,
+          keepCurrentActiveOrganization: true,
+        },
+      });
+    } catch (error) {
+      console.info("[oauth]", {
+        stage: "organization_create_failed",
+        clientId: clientIdFromOAuthQuery(oauthQuery),
+        reason: error instanceof Error ? error.message : "unknown",
+      });
+      writeHtml(
+        response,
+        400,
+        `<h1>Unable to create organization</h1><p>${escapeHtml(error instanceof Error ? error.message : "Create failed")}</p>`,
+      );
+      return;
+    }
+    console.info("[oauth]", {
+      stage: "organization_created",
+      clientId: clientIdFromOAuthQuery(oauthQuery),
+      organizationId: created.id,
+    });
+    const organizations = await organizationApi.listOrganizations({ headers });
+    writeHtml(
+      response,
+      200,
+      renderConsentPage({
+        organizations,
+        oauthQuery,
+        message: `Created ${created.name}. Select it below to bind this grant.`,
+      }),
+    );
+    return;
+  }
+
   const organizationId = body.organization_id;
   if (!organizationId) {
     writeHtml(response, 400, "<h1>Organization selection required</h1>");
@@ -105,6 +208,13 @@ export async function handleConsentRoute(
     writeHtml(response, 403, "<h1>Organization selection rejected</h1>");
     return;
   }
+
+  console.info("[oauth]", {
+    stage: "consent_submit",
+    clientId: clientIdFromOAuthQuery(oauthQuery),
+    scopes: scopesFromOAuthQuery(oauthQuery) ?? body.scope,
+    organizationId,
+  });
 
   await organizationApi.setActiveOrganization({
     headers,
@@ -140,6 +250,12 @@ export async function handleConsentRoute(
 
   const location = consentResponse.headers.get("location");
   if (location) {
+    console.info("[oauth]", {
+      stage: "consent_redirect",
+      organizationId,
+      clientId: clientIdFromOAuthQuery(oauthQuery),
+      hasIss: new URL(location, env.BETTER_AUTH_URL).searchParams.has("iss"),
+    });
     response.writeHead(303, {
       location,
       "cache-control": "no-store",
@@ -163,6 +279,12 @@ export async function handleConsentRoute(
       : null);
 
   if (!redirectUri) {
+    console.info("[oauth]", {
+      stage: "consent_failed",
+      organizationId,
+      clientId: clientIdFromOAuthQuery(oauthQuery),
+      error: payload?.error,
+    });
     writeHtml(
       response,
       consentResponse.status >= 400 ? consentResponse.status : 400,
@@ -170,6 +292,13 @@ export async function handleConsentRoute(
     );
     return;
   }
+
+  console.info("[oauth]", {
+    stage: "consent_redirect",
+    organizationId,
+    clientId: clientIdFromOAuthQuery(oauthQuery),
+    hasIss: new URL(redirectUri, env.BETTER_AUTH_URL).searchParams.has("iss"),
+  });
 
   response.writeHead(303, {
     location: redirectUri,

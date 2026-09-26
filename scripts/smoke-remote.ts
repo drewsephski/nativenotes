@@ -70,6 +70,41 @@ export async function smokeRemote(baseInput: string): Promise<void> {
   }
   ok("GET authorization server metadata (issuer matches)");
 
+  if (asMeta.body.client_id_metadata_document_supported !== true) {
+    fail("authorization server must advertise client_id_metadata_document_supported: true");
+  }
+  ok("CIMD advertised (client_id_metadata_document_supported)");
+
+  if (asMeta.body.authorization_response_iss_parameter_supported !== true) {
+    fail(
+      "authorization server must advertise authorization_response_iss_parameter_supported: true (RFC 9207)",
+    );
+  }
+  ok("RFC 9207 issuer identification advertised");
+
+  const codeChallenge = asMeta.body.code_challenge_methods_supported;
+  if (!Array.isArray(codeChallenge) || !codeChallenge.includes("S256")) {
+    fail("code_challenge_methods_supported must include S256");
+  }
+  ok("PKCE S256 advertised");
+
+  const tokenAuthMethods = asMeta.body.token_endpoint_auth_methods_supported;
+  if (
+    !Array.isArray(tokenAuthMethods) ||
+    !tokenAuthMethods.includes("none") ||
+    !tokenAuthMethods.includes("private_key_jwt")
+  ) {
+    fail(
+      "token_endpoint_auth_methods_supported must include none and private_key_jwt for ChatGPT CIMD intersection",
+    );
+  }
+  ok("token endpoint auth intersection includes none + private_key_jwt");
+
+  if (typeof asMeta.body.registration_endpoint === "string") {
+    fail("registration_endpoint must be absent while DCR remains disabled");
+  }
+  ok("DCR registration_endpoint absent");
+
   const prMeta = await fetchJson(
     new URL("/.well-known/oauth-protected-resource", origin).toString(),
   );
