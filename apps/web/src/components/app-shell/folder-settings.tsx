@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Folder } from "@/lib/product-api";
 import { useAction, useNavigation, useProduct } from "./product-context";
 import { InstructionsEditor } from "./instructions-editor";
@@ -64,15 +71,25 @@ export function FolderForm({
       </label>
       <label className="field">
         Parent folder
-        <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
-          <option value="">Workspace root</option>
-          {options.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-              {f.archivedAt ? " (archived)" : ""}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={parentId || "__workspace_root__"}
+          onValueChange={(value) =>
+            setParentId(value === "__workspace_root__" ? "" : value)
+          }
+        >
+          <SelectTrigger aria-label="Parent folder">
+            <SelectValue placeholder="Workspace root" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__workspace_root__">Workspace root</SelectItem>
+            {options.map((f) => (
+              <SelectItem key={f.id} value={f.id}>
+                {f.name}
+                {f.archivedAt ? " (archived)" : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </label>
       <label className="field">
         Sort position

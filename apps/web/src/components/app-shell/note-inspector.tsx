@@ -2,6 +2,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatRelativeTime } from "@/lib/date";
 import type { ProductNote, Tag } from "@/lib/product-api";
 import {
@@ -43,25 +50,29 @@ export function NoteInspector({
       <h2 className="eyebrow">About</h2>
       <label className="field">
         Folder
-        <select
-          aria-label="Note folder"
-          value={note.folderId ?? ""}
+        <Select
+          value={note.folderId ?? "__inbox__"}
           disabled={action.busy}
-          onChange={(e) =>
+          onValueChange={(value) =>
             void apply("note.move", {
               id: note.id,
-              folderId: e.target.value || null,
+              folderId: value === "__inbox__" ? null : value,
             })
           }
         >
-          <option value="">Inbox</option>
-          {nav.data?.folders.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-              {f.archivedAt ? " (archived)" : ""}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger aria-label="Note folder">
+            <SelectValue placeholder="Inbox" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__inbox__">Inbox</SelectItem>
+            {nav.data?.folders.map((f) => (
+              <SelectItem key={f.id} value={f.id}>
+                {f.name}
+                {f.archivedAt ? " (archived)" : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </label>
       <dl className="grid grid-cols-[70px_1fr] gap-x-3 gap-y-3 text-[12px]">
         <dt className="text-muted-foreground">Created</dt>
@@ -87,22 +98,27 @@ export function NoteInspector({
       </dl>
       <label className="field">
         Status
-        <select
+        <Select
           value={note.freshness}
           disabled={action.busy}
-          onChange={(e) =>
+          onValueChange={(value) =>
             void apply("note.freshness", {
               id: note.id,
-              freshness: e.target.value,
+              freshness: value,
             })
           }
         >
-          <option value="current">
-            {note.verifiedAt ? "Verified" : "Current · unconfirmed"}
-          </option>
-          <option value="needs_review">Needs review</option>
-          <option value="superseded">Superseded</option>
-        </select>
+          <SelectTrigger aria-label="Note status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="current">
+              {note.verifiedAt ? "Verified" : "Current · unconfirmed"}
+            </SelectItem>
+            <SelectItem value="needs_review">Needs review</SelectItem>
+            <SelectItem value="superseded">Superseded</SelectItem>
+          </SelectContent>
+        </Select>
       </label>
       {note.verifiedAt && (
         <p className="text-muted-foreground">
@@ -113,35 +129,42 @@ export function NoteInspector({
         <h3 className="eyebrow">Tags</h3>
         <div className="flex flex-wrap gap-1">
           {note.tags?.map((tag) => (
-            <button
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               key={tag.id}
               disabled={action.busy}
-              className="rounded border border-border px-2 py-1 hover:bg-accent"
+              className="h-auto px-2 py-1"
               aria-label={`Remove tag ${tag.name}`}
               onClick={() => void action.run(() => assign(tag.id, true))}
             >
               # {tag.name} <span aria-hidden>×</span>
-            </button>
+            </Button>
           ))}
         </div>
-        <select
-          aria-label="Assign tag"
-          className="w-full"
+        <Select
           value=""
           disabled={action.busy}
-          onChange={(e) => {
-            if (e.target.value) void action.run(() => assign(e.target.value));
+          onValueChange={(value) => {
+            if (value) void action.run(() => assign(value));
           }}
         >
-          <option value="">Add a tag…</option>
-          {tags.data?.tags
-            .filter((t) => !note.tags?.some((assigned) => assigned.id === t.id))
-            .map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-        </select>
+          <SelectTrigger aria-label="Assign tag" className="w-full">
+            <SelectValue placeholder="Add a tag…" />
+          </SelectTrigger>
+          <SelectContent>
+            {tags.data?.tags
+              .filter(
+                (t) => !note.tags?.some((assigned) => assigned.id === t.id),
+              )
+              .map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
         <form
           className="space-y-2"
           onSubmit={(e) => {

@@ -2,6 +2,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import type { InstructionChain } from "@/lib/product-api";
 import { useAction, useProduct, useResource } from "./product-context";
 export function InstructionsEditor({
@@ -48,19 +54,21 @@ function InstructionForm({
           ancestor folders, then this folder.
         </p>
       </div>
-      {chain
-        .filter((c) => c.folderId !== folderId && c.instructions)
-        .map((c) => (
-          <details
-            key={c.folderId ?? "workspace"}
-            className="rounded border border-border p-3"
-          >
-            <summary className="cursor-pointer text-xs text-muted-foreground">
-              Inherited from {c.name}
-            </summary>
-            <p className="mt-3 whitespace-pre-wrap text-sm">{c.instructions}</p>
-          </details>
-        ))}
+      <Accordion type="multiple" className="space-y-2">
+        {chain
+          .filter((c) => c.folderId !== folderId && c.instructions)
+          .map((c) => (
+            <AccordionItem
+              key={c.folderId ?? "workspace"}
+              value={c.folderId ?? "workspace"}
+            >
+              <AccordionTrigger>Inherited from {c.name}</AccordionTrigger>
+              <AccordionContent className="whitespace-pre-wrap text-muted-foreground">
+                {c.instructions}
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+      </Accordion>
       <form
         className="space-y-3"
         onSubmit={(e) => {

@@ -74,16 +74,6 @@ summary {
 button:disabled {
   cursor: default;
 }
-select {
-  min-height: 32px;
-  max-width: 100%;
-  border: 1px solid var(--input);
-  border-radius: 4px;
-  padding: 4px 8px;
-  background: var(--background);
-  color: var(--foreground);
-  font-size: 13px;
-}
 .field {
   display: flex;
   flex-direction: column;

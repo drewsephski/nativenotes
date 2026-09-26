@@ -12,6 +12,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { CreateProductNote } from "./create-product-note";
 import { FolderForm } from "./folder-settings";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 interface SidebarProps {
   open?: boolean;
   onClose?: () => void;
@@ -45,8 +46,11 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <Link href="/app" onClick={onClose} className="inline-flex rounded-sm">
           <BrandLogo />
         </Link>
-        <button
-          className="rounded p-1.5 hover:bg-accent disabled:opacity-40"
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="rounded p-1.5 disabled:opacity-40"
           aria-label="New note"
           disabled={!workspaceId}
           onClick={() => {
@@ -55,7 +59,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           }}
         >
           <Plus size={17} />
-        </button>
+        </Button>
       </div>
       <div className="px-2 pb-4">
         <WorkspaceSelector />
@@ -64,8 +68,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         aria-label="Workspace navigation"
         className="min-h-0 flex-1 overflow-y-auto px-2"
       >
-        <button
-          className="mb-3 flex h-8 w-full items-center gap-2 rounded px-2 text-muted-foreground hover:bg-accent"
+        <Button
+          type="button"
+          variant="ghost"
+          className="mb-3 h-8 w-full justify-start rounded px-2 text-muted-foreground"
           onClick={() => {
             onClose?.();
             window.dispatchEvent(new Event("native-search"));
@@ -74,7 +80,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <Search size={14} />
           <span>Search</span>
           <kbd className="ml-auto text-[10px]">⌘ K</kbd>
-        </button>
+        </Button>
         {nav("/app", "All Notes", data?.counts.all)}
         {nav("/app/inbox", "Inbox", data?.counts.inbox)}
         {nav("/app/favorites", "Favorites", data?.counts.favorites)}
@@ -86,17 +92,20 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           >
             Folders
           </Link>
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
             aria-label="Create folder"
             disabled={!workspaceId}
-            className="rounded p-1 hover:bg-accent"
+            className="rounded p-1"
             onClick={() => {
               onClose?.();
               setFolder(true);
             }}
           >
             <Plus size={13} />
-          </button>
+          </Button>
         </div>
         {data && (
           <FolderTree

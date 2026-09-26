@@ -39,15 +39,17 @@ export function NoteHistory({
         <ul className="space-y-1">
           {data?.revisions.map((r) => (
             <li key={r.id}>
-              <button
-                className={`w-full rounded p-2 text-left hover:bg-accent ${selected?.id === r.id ? "bg-accent" : ""}`}
+              <Button
+                type="button"
+                variant="ghost"
+                className={`h-auto w-full justify-start rounded p-2 text-left ${selected?.id === r.id ? "bg-accent" : ""}`}
                 onClick={() => setSelected(r)}
               >
                 <span className="font-medium">Version {r.version}</span>
                 <span className="mt-1 block text-[11px] text-muted-foreground">
                   {formatRelativeTime(r.createdAt)}
                 </span>
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

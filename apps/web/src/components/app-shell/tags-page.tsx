@@ -4,6 +4,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Tag } from "@/lib/product-api";
 import { useAction, useProduct, useTags } from "./product-context";
 export function TagsPage() {
@@ -135,20 +142,20 @@ function TagForm({
       >
         <label className="field">
           Merge into
-          <select
-            value={intoId}
-            onChange={(e) => setIntoId(e.target.value)}
-            required
-          >
-            <option value="">Choose a tag</option>
-            {tags
-              .filter((t) => t.id !== tag.id)
-              .map((t) => (
-                <option value={t.id} key={t.id}>
-                  {t.name}
-                </option>
-              ))}
-          </select>
+          <Select value={intoId} onValueChange={setIntoId} required>
+            <SelectTrigger aria-label="Merge into">
+              <SelectValue placeholder="Choose a tag" />
+            </SelectTrigger>
+            <SelectContent>
+              {tags
+                .filter((t) => t.id !== tag.id)
+                .map((t) => (
+                  <SelectItem value={t.id} key={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
         </label>
         <p className="text-xs text-muted-foreground">
           Moves all assignments to the destination and removes this tag.

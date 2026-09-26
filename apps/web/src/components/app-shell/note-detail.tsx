@@ -5,6 +5,12 @@ import { Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Dialog } from "@/components/ui/dialog";
 import { useActiveOrganization, useSession } from "@/lib/auth-client";
 import { formatRelativeTime } from "@/lib/date";
@@ -168,11 +174,14 @@ export function DocumentView({ initialNote }: { initialNote: ProductNote }) {
           <span className="ml-2 hidden sm:inline">/ Note</span>
         </nav>
         <div className="flex items-center gap-1">
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
             aria-label={note.favorited ? "Unfavorite note" : "Favorite note"}
             aria-pressed={note.favorited}
             disabled={action.busy}
-            className="rounded p-2 hover:bg-accent"
+            className="rounded p-2"
             onClick={() =>
               void action.run(async () => {
                 const previous = note;
@@ -198,7 +207,7 @@ export function DocumentView({ initialNote }: { initialNote: ProductNote }) {
                 note.favorited ? "text-[#a66b36]" : "text-muted-foreground"
               }
             />
-          </button>
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -273,12 +282,15 @@ export function DocumentView({ initialNote }: { initialNote: ProductNote }) {
                 Updated {formatRelativeTime(note.updatedAt)}
               </time>
               <span aria-hidden>·</span>
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 className="underline-offset-4 hover:underline"
                 onClick={() => setHistoryOpen(true)}
               >
                 History
-              </button>
+              </Button>
             </div>
             {action.error && (
               <p role="alert" className="mb-4 text-sm text-destructive">
@@ -304,32 +316,36 @@ export function DocumentView({ initialNote }: { initialNote: ProductNote }) {
               </div>
             )}
             {recovery && (
-              <details className="mb-5 rounded border border-border p-3">
-                <summary className="cursor-pointer text-xs text-muted-foreground">
-                  Preserved draft · version {recovery.version}
-                </summary>
-                <h3 className="mt-3 font-medium">{recovery.title}</h3>
-                <p className="whitespace-pre-wrap text-sm">
-                  {recovery.summary}
-                </p>
-                <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap font-sans text-sm">
-                  {recovery.body}
-                </pre>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Copy the changes you want into the latest version above.
-                </p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => {
-                    setRecovery(null);
-                    storeDraft(`${key}:recovery`, null);
-                  }}
-                >
-                  Discard preserved draft
-                </Button>
-              </details>
+              <Accordion type="single" collapsible className="mb-5">
+                <AccordionItem value="recovery">
+                  <AccordionTrigger>
+                    Preserved draft · version {recovery.version}
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <h3 className="font-medium">{recovery.title}</h3>
+                    <p className="whitespace-pre-wrap text-sm">
+                      {recovery.summary}
+                    </p>
+                    <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap font-sans text-sm">
+                      {recovery.body}
+                    </pre>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Copy the changes you want into the latest version above.
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => {
+                        setRecovery(null);
+                        storeDraft(`${key}:recovery`, null);
+                      }}
+                    >
+                      Discard preserved draft
+                    </Button>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             )}
             {editing ? (
               <div className="space-y-5">

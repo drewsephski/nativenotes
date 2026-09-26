@@ -186,6 +186,9 @@ describe("document interactions", () => {
         "Other author's latest",
       ),
     );
+    await user.click(
+      screen.getByRole("button", { name: /Preserved draft · version/ }),
+    );
     expect(screen.getByText("My preserved draft")).toBeInTheDocument();
     expect(
       sessionStorage.getItem("nativenotes:draft:user-a:org-a:a:recovery"),
@@ -218,15 +221,13 @@ describe("document interactions", () => {
       screen.getByRole("button", { name: "Confirm still true" }),
     );
     await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Status" })).toHaveValue(
-        "current",
-      ),
+      expect(
+        screen.getByRole("combobox", { name: "Note status" }),
+      ).toHaveTextContent("Verified"),
     );
     expect(note.version).toBe(1);
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Assign tag" }),
-      "tag-a",
-    );
+    await user.click(screen.getByRole("combobox", { name: "Assign tag" }));
+    await user.click(await screen.findByRole("option", { name: "Research" }));
     await user.click(
       await screen.findByRole("button", { name: "Remove tag Research" }),
     );

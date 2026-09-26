@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { Folder } from "@/lib/product-api";
 import { cn } from "@/lib/utils";
 export function FolderTree({
@@ -43,8 +44,11 @@ export function FolderTree({
                   )}
                 >
                   {hasChildren ? (
-                    <button
-                      className="p-1"
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0 p-1"
                       aria-label={`${expanded ? "Collapse" : "Expand"} ${folder.name}`}
                       aria-expanded={expanded}
                       onClick={() =>
@@ -60,7 +64,7 @@ export function FolderTree({
                         size={12}
                         className={expanded ? "rotate-90" : ""}
                       />
-                    </button>
+                    </Button>
                   ) : (
                     <span className="w-5 shrink-0" />
                   )}
@@ -77,9 +81,22 @@ export function FolderTree({
                     </span>
                   </Link>
                 </div>
-                {hasChildren &&
-                  expanded &&
-                  branch(folder.id, new Set([...ancestors, folder.id]))}
+                {hasChildren && (
+                  <div
+                    className={cn(
+                      "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+                      expanded
+                        ? "grid-rows-[1fr] opacity-100"
+                        : "grid-rows-[0fr] opacity-0",
+                    )}
+                    aria-hidden={!expanded}
+                    inert={!expanded}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      {branch(folder.id, new Set([...ancestors, folder.id]))}
+                    </div>
+                  </div>
+                )}
               </li>
             );
           })}
