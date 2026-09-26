@@ -51,6 +51,8 @@ export async function smokeRemote(baseInput: string): Promise<void> {
   }
   ok("GET /health");
 
+  const expectedIssuer = new URL("/api/auth", origin).toString().replace(/\/$/, "");
+
   const asMeta = await fetchJson(
     new URL("/api/auth/.well-known/oauth-authorization-server", origin).toString(),
   );
@@ -60,7 +62,13 @@ export async function smokeRemote(baseInput: string): Promise<void> {
   if (typeof asMeta.body.issuer !== "string") {
     fail("authorization server metadata missing issuer");
   }
-  ok("GET authorization server metadata");
+  const issuer = asMeta.body.issuer.replace(/\/$/, "");
+  if (issuer !== expectedIssuer) {
+    fail(
+      `issuer ${asMeta.body.issuer} does not match BETTER_AUTH_URL+/api/auth (${expectedIssuer})`,
+    );
+  }
+  ok("GET authorization server metadata (issuer matches)");
 
   const prMeta = await fetchJson(
     new URL("/.well-known/oauth-protected-resource", origin).toString(),
@@ -80,8 +88,17 @@ export async function smokeRemote(baseInput: string): Promise<void> {
   }
   if (advertised.replace(/\/$/, "") !== mcpResource.replace(/\/$/, "")) {
     fail(
-      `advertised MCP resource ${advertised} does not match canonical ${mcpResource}`,
+      `advertised MCP resource ${advertised} does not match MCP_RESOURCE_URL ${mcpResource}`,
     );
+  }
+  const authServers = prMeta.body.authorization_servers;
+  if (Array.isArray(authServers) && authServers.length > 0) {
+    const advertisedIssuer = String(authServers[0]).replace(/\/$/, "");
+    if (advertisedIssuer !== expectedIssuer) {
+      fail(
+        `protected resource authorization_servers[0]=${authServers[0]} does not match ${expectedIssuer}`,
+      );
+    }
   }
   ok("GET protected resource metadata (canonical /mcp)");
 

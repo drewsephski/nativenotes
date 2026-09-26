@@ -270,8 +270,25 @@ For A and B, distinct rows matched user, OAuth client, organization, resource, s
 
 Automated unit/integration tests cover transport boundaries, grant identity, membership checks, and tenant-scoped listing. `pnpm test:oauth` proves the interactive authorization-code + PKCE lifecycle against the Neon test database (`TEST_DATABASE_URL`), including A/B independent grants, active-org drift, membership revocation, and refresh reuse.
 
+### Production deploy + remote smoke (2026-09-26)
+
+- Deployed to Vercel (`nativenotes`, Node `server.ts`) at `https://nativenotes.vercel.app`.
+- Neon production branch migrated explicitly (unpooled); Better Auth + app tables present; no drift vs local journal (`0000`, `0001`).
+- `pnpm smoke:remote https://nativenotes.vercel.app` passed (health, AS metadata issuer, PRM resource, JWKS, anonymous `/mcp` 401).
+- Production metadata advertises CIMD (`client_id_metadata_document_supported: true`) and does **not** advertise a registration endpoint; probe `POST …/oauth2/register` returns `403 Client registration is disabled`.
+
+### Production MCP interoperability proof (Cursor)
+
+Preferred first client was Cursor. Official Cursor MCP docs describe remote OAuth via **Dynamic Client Registration** or **static `auth.CLIENT_ID` / optional secret**, with fixed redirect URIs `https://www.cursor.com/agents/mcp/oauth/callback` and `http://localhost:8787/callback`. Cursor staff state CIMD is not supported and has no published timeline ([forum](https://forum.cursor.com/t/mcp-oauth-cimd-support-plans-and-timelines/148096)).
+
+NativeNotes was configured in Cursor `mcp.json` as a URL-only remote entry (`https://nativenotes.vercel.app/mcp`) with **no** static client and **no** DCR enablement. A complete CIMD consent → tenant grant → refresh → membership revocation loop was **not** completed, because the client cannot present a CIMD `client_id` metadata document URL.
+
+**Stop condition hit:** do not enable DCR; do not switch clients in this task; report Cursor incompatibility clearly. Full production grant/refresh/revocation proof remains pending a CIMD-capable client.
+
 Remaining risks:
 
 - CIMD clients need a public (non-loopback) metadata URL; production uses `@better-auth/cimd/node` to fetch those safely.
+- Cursor (and any DCR-only client) cannot complete the intended remote CIMD flow until the client supports CIMD or product policy explicitly allows a different client-registration strategy.
 - Authorization-code `referenceId` is only inspectable before code exchange.
 - Auth failure responses intentionally return machine-readable JSON without stack traces; operators should rely on server logs for unexpected failures.
+- `nativenotes.vercel.app` is the interim canonical issuer/resource; attaching a custom domain requires updating `BETTER_AUTH_URL`, `MCP_RESOURCE_URL`, and `TENANT_CLAIM_NAMESPACE` together and redeploying.

@@ -58,7 +58,13 @@ Prefer `DATABASE_URL_UNPOOLED` when migrating.
 
 1. Import the GitHub repo into Vercel (Node server; no Next.js).
 2. Set production env vars (`DATABASE_URL`, `BETTER_AUTH_*`, `MCP_RESOURCE_URL`, `TENANT_CLAIM_NAMESPACE`, …).
-3. Point a custom domain at the project; set `BETTER_AUTH_URL` / `MCP_RESOURCE_URL` to that HTTPS origin (not a hardcoded preview URL in source).
+3. Point a custom domain at the project when available; set `BETTER_AUTH_URL` / `MCP_RESOURCE_URL` to that HTTPS origin (not a hardcoded preview URL in source).
 4. Migrate production with `pnpm db:migrate` against the direct URL, then deploy.
+
+Current production origin: `https://nativenotes.vercel.app` (canonical until a custom domain is attached).
+
+Remote smoke: `pnpm smoke:remote https://nativenotes.vercel.app`.
+
+**CIMD / Cursor:** NativeNotes is CIMD-only (DCR disabled). Cursor currently supports MCP OAuth via DCR or static client credentials, not CIMD. Production interoperability with Cursor is blocked until Cursor ships CIMD or a different CIMD-capable client is chosen. Details: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#production-mcp-interoperability-proof).
 
 Details: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). Auth spike notes: [`docs/AUTH-SPIKE.md`](docs/AUTH-SPIKE.md).

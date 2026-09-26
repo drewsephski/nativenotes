@@ -132,10 +132,51 @@ pnpm smoke:remote https://your-domain.com
 Checks (no secrets):
 
 - `GET /health`
-- authorization server metadata
-- protected resource metadata (canonical `/mcp`)
+- authorization server metadata (issuer = `{origin}/api/auth`)
+- protected resource metadata (canonical `/mcp`, matching authorization server)
 - JWKS
 - anonymous `POST /mcp` → 401 Bearer
+
+## Production MCP interoperability proof
+
+Recorded against the first production deploy (2026-09-26). No secrets or raw tokens are included.
+
+| Item | Value |
+| --- | --- |
+| Canonical domain | `https://nativenotes.vercel.app` (no NativeNotes custom domain available yet; production alias, not a one-off preview URL) |
+| Vercel deployment model | Root `server.ts` Node entrypoint, Fluid/serverless, `maxDuration: 60`, framework `node`, region `iad1` |
+| Neon production branch | `production` (`br-crimson-block-b44lqkup`, endpoint `ep-sweet-queen-b4k8s6wq`); migrations applied via direct/unpooled URL; test branch `test` / `ep-nameless-glade` untouched |
+| Client tested | Cursor (preferred first client) |
+| CIMD discovery | **Blocked by client.** NativeNotes advertises `client_id_metadata_document_supported: true` and keeps DCR disabled (`POST /api/auth/oauth2/register` → `403` `Client registration is disabled`). Cursor documents OAuth via **DCR or static `auth.CLIENT_ID`** only; staff confirmed CIMD has no timeline ([forum thread](https://forum.cursor.com/t/mcp-oauth-cimd-support-plans-and-timelines/148096); [Cursor MCP docs](https://cursor.com/docs/mcp)) |
+| OAuth result | Not completed with Cursor. Stopped before enabling DCR or switching clients |
+| Tenant binding / refresh / revocation | Not exercised on production with a real client (local `pnpm test:oauth` still covers these against the Neon **test** branch) |
+| Known client quirks | Cursor redirect URIs (when static OAuth is used): `https://www.cursor.com/agents/mcp/oauth/callback`, `http://localhost:8787/callback`. Cursor expects DCR or pre-registered credentials; it does not fetch CIMD client metadata documents |
+
+### Production discovery snapshot (actual)
+
+Authorization server (`GET /api/auth/.well-known/oauth-authorization-server`):
+
+- `issuer`: `https://nativenotes.vercel.app/api/auth`
+- `authorization_endpoint`: `…/api/auth/oauth2/authorize`
+- `token_endpoint`: `…/api/auth/oauth2/token`
+- `jwks_uri`: `…/api/auth/jwks`
+- `code_challenge_methods_supported`: `["S256"]`
+- `client_id_metadata_document_supported`: `true`
+- `grant_types_supported`: includes `authorization_code`, `refresh_token`
+- `scopes_supported`: `openid`, `offline_access`, `mcp:read`, `mcp:write`, `mcp:instructions`, `mcp:admin`
+- `registration_endpoint`: absent (DCR disabled)
+
+Protected resource (`GET /.well-known/oauth-protected-resource`):
+
+- `resource`: `https://nativenotes.vercel.app/mcp`
+- `authorization_servers`: `["https://nativenotes.vercel.app/api/auth"]`
+- `bearer_methods_supported`: `["header"]`
+
+Anonymous `POST /mcp` returns `401` with `WWW-Authenticate: Bearer resource_metadata="https://nativenotes.vercel.app/.well-known/oauth-protected-resource/mcp"`.
+
+### Stop decision
+
+Do **not** enable DCR to unblock Cursor. Do **not** seed a static OAuth client as a silent security downgrade without an explicit product decision. Next interoperability client should be one that already speaks CIMD (for example VS Code or Claude Desktop/Code), after an explicit go-ahead.
 
 ## Rollback considerations
 
