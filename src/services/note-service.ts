@@ -28,6 +28,8 @@ export type CreateNoteForTenantInput = {
   tenantId: string;
   title: string;
   body: string;
+  summary?: string | null;
+  authorUserId?: string;
 };
 
 export type UpdateNoteForTenantInput = {
@@ -36,6 +38,8 @@ export type UpdateNoteForTenantInput = {
   expectedVersion: number;
   title: string;
   body: string;
+  summary?: string | null;
+  authorUserId?: string;
 };
 
 function mapNote(note: Note): NoteListItem {
@@ -83,6 +87,8 @@ export async function createNoteForTenant(
     tenantId: input.tenantId,
     title: input.title,
     body: input.body,
+    ...(input.summary !== undefined ? { summary: input.summary } : {}),
+    ...(input.authorUserId ? { authorUserId: input.authorUserId } : {}),
   });
   return mapNote(note);
 }
@@ -101,6 +107,8 @@ export async function updateNoteForTenant(
     expectedVersion: input.expectedVersion,
     title: input.title,
     body: input.body,
+    ...(input.summary !== undefined ? { summary: input.summary } : {}),
+    ...(input.authorUserId ? { authorUserId: input.authorUserId } : {}),
   });
 
   if (updated) {

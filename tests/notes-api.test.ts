@@ -755,6 +755,7 @@ describe("handleNotesRoute", () => {
       updatedAt: "2026-01-04T00:00:00.000Z",
     });
     expect(mockUpdate).toHaveBeenCalledWith({
+      authorUserId: "user-a",
       tenantId: "org-a",
       noteId: "note-a",
       expectedVersion: 1,

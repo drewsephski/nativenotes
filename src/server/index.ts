@@ -1,3 +1,4 @@
+import { handleProductRoute } from "./product-route.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import { toNodeHandler } from "@modelcontextprotocol/node";
@@ -83,6 +84,12 @@ export function createNativeNotesRequestListener() {
         if (!response.headersSent)
           writeJson(response, 500, { error: "internal_server_error" });
       });
+      return;
+    }
+
+    if (pathname.startsWith("/api/workspace/")) {
+      if (applyTrustedOriginCors(request, response)) return;
+      void handleProductRoute(request, response);
       return;
     }
 

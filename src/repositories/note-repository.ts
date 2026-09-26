@@ -1,13 +1,16 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "../db/client.js";
-import { notes, type Note } from "../db/schema.js";
+import { notes, noteRevisions, type Note } from "../db/schema.js";
 
 export type CreateNoteInput = {
   id: string;
   tenantId: string;
   title: string;
   body: string;
+  summary?: string | null;
+  authorUserId?: string;
 };
 
 export type UpdateNoteInput = {
@@ -16,6 +19,8 @@ export type UpdateNoteInput = {
   expectedVersion: number;
   title: string;
   body: string;
+  summary?: string | null;
+  authorUserId?: string;
 };
 
 export interface NoteRepository {
@@ -35,47 +40,41 @@ export const noteRepository: NoteRepository = {
     return db
       .select()
       .from(notes)
-      .where(and(eq(notes.tenantId, tenantId)))
+      .where(and(eq(notes.tenantId, tenantId), isNull(notes.archivedAt), isNull(notes.trashedAt)))
       .orderBy(asc(notes.createdAt));
   },
 
   async create(input) {
-    const inserted = await db
-      .insert(notes)
-      .values({
-        id: input.id,
-        tenantId: input.tenantId,
-        title: input.title,
-        body: input.body,
-      })
-      .returning();
-
-    const note = inserted[0];
-    if (!note) {
-      throw new Error("Failed to create note");
-    }
-    return note;
+    return db.transaction(async (tx) => {
+      const [note] = await tx.insert(notes).values({
+        id: input.id, tenantId: input.tenantId, title: input.title,
+        body: input.body, summary: input.summary, createdByUserId: input.authorUserId,
+      }).returning();
+      if (!note) throw new Error("Failed to create note");
+      await tx.insert(noteRevisions).values(snapshot(note, input.authorUserId));
+      return note;
+    });
   },
 
   async update(input) {
-    const updated = await db
-      .update(notes)
-      .set({
-        title: input.title,
-        body: input.body,
-        updatedAt: sql`now()`,
-        version: sql`${notes.version} + 1`,
-      })
-      .where(
-        and(
-          eq(notes.tenantId, input.tenantId),
-          eq(notes.id, input.noteId),
-          eq(notes.version, input.expectedVersion),
-        ),
-      )
-      .returning();
-
-    return updated[0] ?? null;
+    return db.transaction(async (tx) => {
+      const [prior] = await tx.select().from(notes).where(and(
+        eq(notes.tenantId, input.tenantId), eq(notes.id, input.noteId),
+      )).for("update");
+      if (!prior || prior.version !== input.expectedVersion) return null;
+      // Seed the baseline for notes that predate revision history.
+      await tx.insert(noteRevisions).values(snapshot(prior)).onConflictDoNothing();
+      const [updated] = await tx.update(notes).set({
+        title: input.title, body: input.body,
+        ...(input.summary !== undefined ? { summary: input.summary } : {}),
+        updatedAt: sql`now()`, version: sql`${notes.version} + 1`,
+        freshness: "needs_review", verifiedAt: null,
+      }).where(and(eq(notes.tenantId, input.tenantId), eq(notes.id, input.noteId),
+        eq(notes.version, input.expectedVersion))).returning();
+      if (!updated) throw new Error("Locked note update failed");
+      await tx.insert(noteRevisions).values(snapshot(updated, input.authorUserId));
+      return updated;
+    });
   },
 
   async findByTenantAndId(tenantId, noteId) {
@@ -87,3 +86,9 @@ export const noteRepository: NoteRepository = {
     return rows[0] ?? null;
   },
 };
+
+function snapshot(note: Note, authorUserId?: string) {
+  return { id: randomUUID(), tenantId: note.tenantId, noteId: note.id,
+    version: note.version, title: note.title, body: note.body, summary: note.summary,
+    authorUserId: authorUserId ?? null, createdAt: note.updatedAt };
+}
