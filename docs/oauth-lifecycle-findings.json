@@ -1,58 +1,58 @@
 {
   "referenceIdLifecycle": {
     "consentReferenceIds": [
-      "ih7kb3nfCeOqyUTgDNOWiAlWMsCmtP0j"
+      "BKuSSyhMe0CqcwOdEO0GafrnBfD06kHt"
     ],
     "refreshReferenceIds": [
-      "ih7kb3nfCeOqyUTgDNOWiAlWMsCmtP0j"
+      "BKuSSyhMe0CqcwOdEO0GafrnBfD06kHt"
     ],
     "authorizationCodeReferenceIds": []
   },
   "grantA": {
-    "id": "3c2cdfa6c67dfa554ead582db46d83faf8c9cf22efccaf88034b09dbd196b39e",
-    "userId": "oJ5khvOZ7gRTL5TXFNSVIunTqSA1OUDZ",
+    "id": "79f700868e2270cce251867cede959209f56297e485ac55760cb14f6eee9799c",
+    "userId": "MpsjELDa9Q2YELS5kRO1JZbmTlVC7uHw",
     "oauthClientId": "nativenotes-oauth-harness",
-    "organizationId": "ih7kb3nfCeOqyUTgDNOWiAlWMsCmtP0j",
+    "organizationId": "BKuSSyhMe0CqcwOdEO0GafrnBfD06kHt",
     "resource": "http://127.0.0.1:3310/mcp",
     "scopes": [
       "mcp:read",
       "offline_access",
       "openid"
     ],
-    "stableGrantIdentifier": "3c2cdfa6c67dfa554ead582db46d83faf8c9cf22efccaf88034b09dbd196b39e",
-    "createdAt": "2026-09-26T14:55:19.227Z",
-    "updatedAt": "2026-09-26T14:55:19.227Z",
+    "stableGrantIdentifier": "79f700868e2270cce251867cede959209f56297e485ac55760cb14f6eee9799c",
+    "createdAt": "2026-09-26T14:56:21.478Z",
+    "updatedAt": "2026-09-26T14:56:21.478Z",
     "revokedAt": null
   },
   "activeOrgDrift": {
-    "activeOrganizationId": "JzSqVINt4NMH24Xd7Orz59NGPqPfkBDw",
-    "refreshedTenantClaim": "ih7kb3nfCeOqyUTgDNOWiAlWMsCmtP0j"
+    "activeOrganizationId": "xreU1qL4TUkj8waY56TWV7gnmn0BJ0ij",
+    "refreshedTenantClaim": "BKuSSyhMe0CqcwOdEO0GafrnBfD06kHt"
   },
   "grantB": {
-    "id": "c87c725f75814d122beda6b5177acb84d636f8c1e3658c2b564090b625a2357f",
-    "userId": "oJ5khvOZ7gRTL5TXFNSVIunTqSA1OUDZ",
+    "id": "87ddbc8f3cf3ddc65340ae6c0479f349315aa085a4e638868009b25f0368e38d",
+    "userId": "MpsjELDa9Q2YELS5kRO1JZbmTlVC7uHw",
     "oauthClientId": "nativenotes-oauth-harness",
-    "organizationId": "JzSqVINt4NMH24Xd7Orz59NGPqPfkBDw",
+    "organizationId": "xreU1qL4TUkj8waY56TWV7gnmn0BJ0ij",
     "resource": "http://127.0.0.1:3310/mcp",
     "scopes": [
       "mcp:read",
       "offline_access",
       "openid"
     ],
-    "stableGrantIdentifier": "c87c725f75814d122beda6b5177acb84d636f8c1e3658c2b564090b625a2357f",
-    "createdAt": "2026-09-26T14:55:31.457Z",
-    "updatedAt": "2026-09-26T14:55:31.457Z",
+    "stableGrantIdentifier": "87ddbc8f3cf3ddc65340ae6c0479f349315aa085a4e638868009b25f0368e38d",
+    "createdAt": "2026-09-26T14:56:33.982Z",
+    "updatedAt": "2026-09-26T14:56:33.982Z",
     "revokedAt": null
   },
   "independentGrants": [
     {
-      "organizationId": "JzSqVINt4NMH24Xd7Orz59NGPqPfkBDw",
-      "stableGrantIdentifier": "c87c725f75814d122beda6b5177acb84d636f8c1e3658c2b564090b625a2357f",
+      "organizationId": "BKuSSyhMe0CqcwOdEO0GafrnBfD06kHt",
+      "stableGrantIdentifier": "79f700868e2270cce251867cede959209f56297e485ac55760cb14f6eee9799c",
       "revokedAt": null
     },
     {
-      "organizationId": "ih7kb3nfCeOqyUTgDNOWiAlWMsCmtP0j",
-      "stableGrantIdentifier": "3c2cdfa6c67dfa554ead582db46d83faf8c9cf22efccaf88034b09dbd196b39e",
+      "organizationId": "xreU1qL4TUkj8waY56TWV7gnmn0BJ0ij",
+      "stableGrantIdentifier": "87ddbc8f3cf3ddc65340ae6c0479f349315aa085a4e638868009b25f0368e38d",
       "revokedAt": null
     }
   ],
