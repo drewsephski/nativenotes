@@ -6,8 +6,10 @@ import { toNodeHandler as toAuthNodeHandler } from "better-auth/node";
 import { auth } from "../auth/auth.js";
 import { env } from "../config/env.js";
 import { protectedMcpHandler } from "../mcp/handler.js";
-import { handleSignInRoute, handleSignUpRoute } from "./auth-routes.js";
+import { handleSignInRoute, handleSignUpRoute, handleGoogleSignInRoute } from "./auth-routes.js";
 import { handleConsentRoute } from "./consent-route.js";
+import { renderHomePage } from "../ui/pages.js";
+import { writeHtml } from "../ui/html.js";
 
 const authHandler = toAuthNodeHandler(auth);
 const mcpNodeHandler = toNodeHandler(
@@ -37,13 +39,7 @@ export function createNativeNotesRequestListener() {
     }
 
     if (request.method === "GET" && pathname === "/") {
-      response.writeHead(200, {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
-      });
-      response.end(
-        `<!doctype html><html><body><h1>NativeNotes</h1><p>Local auth surface for MCP OAuth proofs.</p><p><a href="/sign-in">Sign in</a> · <a href="/sign-up">Sign up</a></p></body></html>`,
-      );
+      writeHtml(response, 200, renderHomePage());
       return;
     }
 
@@ -74,6 +70,14 @@ export function createNativeNotesRequestListener() {
 
     if (pathname === "/sign-up") {
       void handleSignUpRoute(request, response).catch(() => {
+        if (!response.headersSent)
+          writeJson(response, 500, { error: "internal_server_error" });
+      });
+      return;
+    }
+
+    if (pathname === "/sign-in/google") {
+      void handleGoogleSignInRoute(request, response).catch(() => {
         if (!response.headersSent)
           writeJson(response, 500, { error: "internal_server_error" });
       });

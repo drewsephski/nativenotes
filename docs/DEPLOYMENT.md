@@ -56,9 +56,26 @@ See [`.env.example`](../.env.example).
 | `BETTER_AUTH_URL` | Canonical public origin (`https://<domain>`) |
 | `MCP_RESOURCE_URL` | Canonical MCP resource (`https://<domain>/mcp`) |
 | `TENANT_CLAIM_NAMESPACE` | Claim namespace (`https://<domain>/claims`) |
+| `GOOGLE_CLIENT_ID` | Google OAuth Web client ID (Better Auth social provider) |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth Web client secret |
 | `TRUSTED_ORIGINS` | Optional comma-separated extra origins |
 | `NODE_ENV` | `development` \| `test` \| `production` |
 | `PORT` | Local listen port (Vercel injects `PORT`) |
+
+### Google OAuth redirect URIs
+
+Better Auth 1.7.6 callback path (with `basePath: /api/auth`):
+
+`{BETTER_AUTH_URL}/api/auth/callback/google`
+
+| Environment | Authorized redirect URI |
+| --- | --- |
+| Local | `http://localhost:3000/api/auth/callback/google` |
+| Production | `https://nativenotes.vercel.app/api/auth/callback/google` |
+
+Set both URIs on the same Google Cloud OAuth Web client. Without `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, the Google button is disabled and email/password remains available.
+
+Account linking uses Better Auth defaults: a verified Google email matching an existing email/password user is linked to that user (`allowDifferentEmails` is not enabled).
 
 Production **requires HTTPS** for `BETTER_AUTH_URL` and `MCP_RESOURCE_URL`. Do not hardcode temporary `*.vercel.app` URLs in source; set them (or a custom domain) in the environment.
 
@@ -97,6 +114,9 @@ Derived from `BETTER_AUTH_URL` / `MCP_RESOURCE_URL`:
 | Authorize | `/api/auth/oauth2/authorize` |
 | Token | `/api/auth/oauth2/token` |
 | Consent UI | `/oauth/consent` |
+| Sign in / sign up | `/sign-in`, `/sign-up` |
+| Google social start | `POST /sign-in/google` → Better Auth `/api/auth/sign-in/social` |
+| Google OAuth callback | `/api/auth/callback/google` |
 
 Better Auth production settings in this repo:
 
@@ -182,11 +202,21 @@ Anonymous `POST /mcp` returns `401` with `WWW-Authenticate: Bearer resource_meta
 1. `pnpm smoke:remote https://nativenotes.vercel.app`
 2. `pnpm validate:chatgpt-cimd`
 3. ChatGPT Developer Mode → custom MCP → `https://nativenotes.vercel.app/mcp` → OAuth/CIMD (not DCR)
-4. NativeNotes sign-in → consent → create/select Organization A
+4. NativeNotes sign-in (Google or email) → consent → create/select Organization A
 5. `pnpm seed:proof-notes <orgAId> [orgBId]`
 6. ChatGPT tool scan → `note.list`
 7. Prove refresh tenant stickiness, membership removal 403, optional Org B reconnect
 
+Grokbot / computer-use scenarios: [`docs/QA.md`](./QA.md).
+
+### Vercel env for Google
+
+Add to the Vercel project (Production + Preview as needed):
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+
+Then redeploy. Never commit the secret.
 See [`docs/AUTH-SPIKE.md`](AUTH-SPIKE.md#chatgpt-interoperability-proof) for the full matrix and interactive status.
 
 ### Cursor (rejected)

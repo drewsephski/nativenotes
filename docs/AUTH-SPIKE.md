@@ -29,6 +29,13 @@ Runtime configuration is in `src/auth/auth.ts`:
 
 ```ts
 emailAndPassword: { enabled: true },
+socialProviders: {
+  // When GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are set:
+  google: {
+    clientId: env.GOOGLE_CLIENT_ID,
+    clientSecret: env.GOOGLE_CLIENT_SECRET,
+  },
+},
 plugins: [
   organization(),
   jwt({ jwt: { issuer: betterAuthIssuer } }),
@@ -55,6 +62,19 @@ plugins: [
 ]
 ```
 
+### Google OAuth
+
+- Provider: Better Auth built-in `socialProviders.google`
+- Callback (better-auth 1.7.6, `basePath: /api/auth`): `https://nativenotes.vercel.app/api/auth/callback/google`
+- Local callback: `http://localhost:3000/api/auth/callback/google`
+- App route `POST /sign-in/google` forwards to `/api/auth/sign-in/social` with `provider: "google"` and optional `oauth_query`
+- OAuth Provider hooks store `oauth_query` in OAuth serverContext on `/sign-in/social`, so ChatGPT authorize state survives the Google round trip
+- Account linking: Better Auth defaults (enabled). Verified same-email Google accounts link to existing email/password users. `allowDifferentEmails` is not enabled.
+
+### Auth / consent UI
+
+Server-rendered HTML + CSS design tokens in `src/ui/` (no Next.js, no SPA framework). Pages: `/sign-in`, `/sign-up`, `/oauth/consent`. Grokbot anchors and scenarios: `docs/QA.md`.
+
 `mcp()` already composes the OAuth Provider behavior. No separate `oauthProvider()` registration is used. `jwt()` is required for the signing keys and JWKS endpoint. The application uses the generated Better Auth Drizzle schema; Better Auth internal tables are not hand-created.
 
 The current MCP plugin API does not expose a global `requirePKCE` option. The installed OAuth Provider metadata advertises `code_challenge_methods_supported: ["S256"]`, and its authorization-code path validates S256 challenges when supplied. The client metadata profile is MCP 2026-07-28 and DCR remains disabled by default.
@@ -72,6 +92,8 @@ With the local values in `.env.example`:
 - JWKS: `GET http://localhost:3000/api/auth/jwks`
 - MCP consent UI: `GET/POST http://localhost:3000/oauth/consent`
 - Local auth UI: `GET/POST /sign-in`, `GET/POST /sign-up`
+- Google social start: `POST /sign-in/google`
+- Google callback: `GET /api/auth/callback/google`
 
 The authorization metadata observed locally advertises authorization-code, refresh-token, PKCE S256, the configured scopes, and `client_id_metadata_document_supported: true`.
 
@@ -354,18 +376,20 @@ OpenAI: when the singular CIMD preference is in the intersection, ChatGPT uses i
 1. Enable ChatGPT Developer Mode (Business/Enterprise admin settings).
 2. Create custom MCP app / connector pointing at `https://nativenotes.vercel.app/mcp`, authentication **OAuth**, prefer **CIMD** (do not choose DCR).
 3. Confirm management UI shows stable CIMD `https://chatgpt.com/oauth/client.json` and redirect `https://chatgpt.com/connector_platform_oauth_redirect` (expected because RFC 9207 is advertised and implemented).
-4. Sign in on NativeNotes → create/select Organization A on `/oauth/consent` → approve.
+4. Sign in on NativeNotes (Google preferred, email/password fallback) → create/select Organization A on `/oauth/consent` → approve.
 5. Allow ChatGPT tool scan → invoke `note.list`.
 
-Consent UI can create organizations when none exist (auth-surface bootstrap for org-bound grants; not a notes product feature). Seed tenant notes with `pnpm seed:proof-notes <orgAId> [orgBId]` after orgs exist.
+Consent UI can create workspaces when none exist (auth-surface bootstrap for org-bound grants; not a notes product feature). Seed tenant notes with `pnpm seed:proof-notes <orgAId> [orgBId]` after orgs exist.
+
+Computer-use QA checklist: `docs/QA.md`.
 
 ### Interactive proof status
 
 | Step | Status |
 | --- | --- |
 | Metadata / CIMD / RFC 9207 / smoke | Verified (production + `pnpm validate:chatgpt-cimd`) |
-| Production redeploy with consent org bootstrap + safe `[oauth]`/`[mcp]` logs + clearer `note.list` description | Deployed to `https://nativenotes.vercel.app` |
-| ChatGPT authorize → Org A consent → `note.list` | **Blocked on interactive ChatGPT login** (Developer Mode / Business or Enterprise). Agent reached ChatGPT login wall only. |
+| Polished auth/consent UI + Google OAuth provider wiring | Implemented in repo; requires `GOOGLE_CLIENT_*` on Vercel |
+| ChatGPT authorize → Google → Org A consent → `note.list` | Pending production Google credentials + interactive ChatGPT session |
 | Active-org drift refresh stays Org A | Pending interactive session (inspect `oauth_refresh_token.reference_id` / `oauth_grant_tenant` if refresh is opaque) |
 | Membership removal → 403 | Pending interactive session |
 | Independent Org B grant | Pending (document ChatGPT single-connector UI limit if present) |

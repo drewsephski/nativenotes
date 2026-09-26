@@ -25,14 +25,25 @@ pnpm db:migrate
 pnpm dev
 ```
 
-The server listens on `http://localhost:3000` (root [`server.ts`](server.ts)). Health: `/health`. MCP: `/mcp`. Auth UI: `/sign-in`, `/sign-up`.
+The server listens on `http://localhost:3000` (root [`server.ts`](server.ts)). Health: `/health`. MCP: `/mcp`. Auth UI: `/sign-in`, `/sign-up`, consent: `/oauth/consent`.
+
+Google OAuth (optional locally, required for production “Continue with Google”):
+
+1. Create a Google Cloud OAuth **Web application** client.
+2. Authorized redirect URIs:
+   - `http://localhost:3000/api/auth/callback/google`
+   - `https://nativenotes.vercel.app/api/auth/callback/google`
+3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (see [`.env.example`](.env.example)).
+
+The callback path is Better Auth’s default for basePath `/api/auth`: `/api/auth/callback/google` (better-auth 1.7.6).
 
 ```sh
 pnpm check          # lint + typecheck + test + build
 pnpm test:oauth     # OAuth lifecycle against TEST_DATABASE_URL
-pnpm smoke:remote https://your-domain.com
+pnpm smoke:remote https://nativenotes.vercel.app
 ```
 
+Computer-use / Grokbot scenarios: [`docs/QA.md`](docs/QA.md).
 ## Environment
 
 See [`.env.example`](.env.example) and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).

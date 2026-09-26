@@ -1,36 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { env } from "../config/env.js";
-
-function escapeHtml(value: string): string {
-  return value.replace(
-    /[&<>'"]/g,
-    (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[
-        character
-      ] ?? character,
-  );
-}
-
-function writeHtml(
-  response: ServerResponse,
-  status: number,
-  html: string,
-): void {
-  response.writeHead(status, {
-    "content-type": "text/html; charset=utf-8",
-    "cache-control": "no-store",
-  });
-  response.end(`<!doctype html><html><body>${html}</body></html>`);
-}
+import { env, googleOAuthEnabled } from "../config/env.js";
+import { writeHtml } from "../ui/html.js";
+import {
+  renderSignInPage,
+  renderSignUpPage,
+  renderSimpleStatusPage,
+} from "../ui/pages.js";
 
 function oauthQueryFromRequest(request: IncomingMessage): string {
   const url = new URL(request.url ?? "/", env.BETTER_AUTH_URL);
   return url.search.startsWith("?") ? url.search.slice(1) : url.search;
-}
-
-function pageShell(title: string, body: string): string {
-  return `<h1>${escapeHtml(title)}</h1>${body}<p><a href="/sign-in">Sign in</a> · <a href="/sign-up">Sign up</a></p>`;
 }
 
 async function forwardAuthJson(
@@ -38,16 +18,23 @@ async function forwardAuthJson(
   response: ServerResponse,
   path: string,
   payload: Record<string, unknown>,
+  options?: { mode?: "sign-in" | "sign-up" },
 ): Promise<void> {
+  const mode = options?.mode ?? "sign-in";
+  const oauthQuery =
+    typeof payload.oauth_query === "string" ? payload.oauth_query : "";
+
   const upstream = await fetch(new URL(path, env.BETTER_AUTH_URL), {
     method: "POST",
     headers: {
       "content-type": "application/json",
       accept: "application/json",
       ...(request.headers.cookie
-        ? { cookie: Array.isArray(request.headers.cookie)
-            ? request.headers.cookie.join("; ")
-            : request.headers.cookie }
+        ? {
+            cookie: Array.isArray(request.headers.cookie)
+              ? request.headers.cookie.join("; ")
+              : request.headers.cookie,
+          }
         : {}),
     },
     body: JSON.stringify(payload),
@@ -69,25 +56,62 @@ async function forwardAuthJson(
 
   const text = await upstream.text();
   let redirectUri: string | undefined;
+  let errorMessage: string | undefined;
   try {
     const parsed = text
-      ? (JSON.parse(text) as { redirect_uri?: unknown })
+      ? (JSON.parse(text) as {
+          redirect_uri?: unknown;
+          url?: unknown;
+          redirect?: unknown;
+          message?: unknown;
+          error?: unknown;
+        })
       : null;
     if (parsed && typeof parsed.redirect_uri === "string") {
       redirectUri = parsed.redirect_uri;
+    } else if (
+      parsed &&
+      parsed.redirect === true &&
+      typeof parsed.url === "string"
+    ) {
+      redirectUri = parsed.url;
+    } else if (parsed && typeof parsed.url === "string") {
+      redirectUri = parsed.url;
+    }
+    if (parsed && typeof parsed.message === "string") {
+      errorMessage = parsed.message;
+    } else if (parsed && typeof parsed.error === "string") {
+      errorMessage = parsed.error;
     }
   } catch {
     // Non-JSON success bodies fall through to the default next location.
   }
 
   if (!upstream.ok) {
+    const failurePage =
+      mode === "sign-up"
+        ? renderSignUpPage({
+            oauthQuery,
+            googleEnabled: googleOAuthEnabled,
+            message: {
+              text:
+                errorMessage ??
+                "Unable to create the account. Check your details and try again.",
+            },
+          })
+        : renderSignInPage({
+            oauthQuery,
+            googleEnabled: googleOAuthEnabled,
+            message: {
+              text:
+                errorMessage ??
+                "Unable to complete authentication. Check your credentials and try again.",
+            },
+          });
     writeHtml(
       response,
       upstream.status >= 400 ? upstream.status : 400,
-      pageShell(
-        "Authentication failed",
-        "<p>Unable to complete authentication. Check your credentials and try again.</p>",
-      ),
+      failurePage,
     );
     return;
   }
@@ -102,13 +126,13 @@ async function forwardAuthJson(
   }
 
   const next =
-    typeof payload.oauth_query === "string" && payload.oauth_query.length > 0
+    oauthQuery.length > 0
       ? (() => {
           const authorizeUrl = new URL(
             "/api/auth/oauth2/authorize",
             env.BETTER_AUTH_URL,
           );
-          authorizeUrl.search = String(payload.oauth_query);
+          authorizeUrl.search = oauthQuery;
           return authorizeUrl.toString();
         })()
       : "/";
@@ -139,10 +163,10 @@ export async function handleSignInRoute(
     writeHtml(
       response,
       200,
-      pageShell(
-        "NativeNotes sign in",
-        `<form method="post"><label>Email <input name="email" type="email" required autocomplete="username"></label><label>Password <input name="password" type="password" required autocomplete="current-password"></label><input type="hidden" name="oauth_query" value="${escapeHtml(oauthQuery)}"><button type="submit">Sign in</button></form>`,
-      ),
+      renderSignInPage({
+        oauthQuery,
+        googleEnabled: googleOAuthEnabled,
+      }),
     );
     return;
   }
@@ -158,7 +182,11 @@ export async function handleSignInRoute(
     writeHtml(
       response,
       400,
-      pageShell("Sign in failed", "<p>Email and password are required.</p>"),
+      renderSignInPage({
+        oauthQuery: body.oauth_query ?? oauthQuery,
+        googleEnabled: googleOAuthEnabled,
+        message: { text: "Email and password are required." },
+      }),
     );
     return;
   }
@@ -180,10 +208,10 @@ export async function handleSignUpRoute(
     writeHtml(
       response,
       200,
-      pageShell(
-        "NativeNotes sign up",
-        `<form method="post"><label>Name <input name="name" type="text" required autocomplete="name"></label><label>Email <input name="email" type="email" required autocomplete="username"></label><label>Password <input name="password" type="password" required autocomplete="new-password" minlength="8"></label><input type="hidden" name="oauth_query" value="${escapeHtml(oauthQuery)}"><button type="submit">Create account</button></form>`,
-      ),
+      renderSignUpPage({
+        oauthQuery,
+        googleEnabled: googleOAuthEnabled,
+      }),
     );
     return;
   }
@@ -199,18 +227,64 @@ export async function handleSignUpRoute(
     writeHtml(
       response,
       400,
-      pageShell(
-        "Sign up failed",
-        "<p>Name, email, and password are required.</p>",
-      ),
+      renderSignUpPage({
+        oauthQuery: body.oauth_query ?? oauthQuery,
+        googleEnabled: googleOAuthEnabled,
+        message: { text: "Name, email, and password are required." },
+      }),
     );
     return;
   }
 
-  await forwardAuthJson(request, response, "/api/auth/sign-up/email", {
-    name: body.name,
-    email: body.email,
-    password: body.password,
-    ...(body.oauth_query ? { oauth_query: body.oauth_query } : {}),
+  await forwardAuthJson(
+    request,
+    response,
+    "/api/auth/sign-up/email",
+    {
+      name: body.name,
+      email: body.email,
+      password: body.password,
+      ...(body.oauth_query ? { oauth_query: body.oauth_query } : {}),
+    },
+    { mode: "sign-up" },
+  );
+}
+
+/**
+ * Starts Better Auth Google social sign-in.
+ * Passes `oauth_query` so the OAuth Provider serverContext preserves the
+ * ChatGPT authorize state across the Google round trip.
+ */
+export async function handleGoogleSignInRoute(
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<void> {
+  if (request.method !== "POST") {
+    response.writeHead(405, { allow: "POST" });
+    response.end();
+    return;
+  }
+
+  if (!googleOAuthEnabled) {
+    writeHtml(
+      response,
+      503,
+      renderSimpleStatusPage({
+        title: "Google sign-in unavailable",
+        message:
+          "Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
+        statusTone: "error",
+      }),
+    );
+    return;
+  }
+
+  const body = await readBody(request);
+  const oauthQuery = body.oauth_query ?? "";
+
+  await forwardAuthJson(request, response, "/api/auth/sign-in/social", {
+    provider: "google",
+    callbackURL: "/",
+    ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
   });
 }
