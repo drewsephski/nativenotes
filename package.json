@@ -1,0 +1,47 @@
+{
+  "name": "hjarni-clone",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "auth:generate": "pnpm dlx auth@1.7.6 generate --config src/auth/schema-cli.ts --adapter drizzle --dialect postgresql --output src/db/auth-schema.ts --yes"
+  },
+  "dependencies": {
+    "@better-auth/cimd": "1.7.6",
+    "@better-auth/core": "1.7.6",
+    "@better-auth/drizzle-adapter": "1.7.6",
+    "@better-auth/mcp": "1.7.6",
+    "@better-auth/oauth-provider": "1.7.6",
+    "@modelcontextprotocol/node": "2.1.0",
+    "@modelcontextprotocol/server": "2.1.0",
+    "better-auth": "1.7.6",
+    "dotenv": "17.2.2",
+    "drizzle-orm": "0.45.3",
+    "jose": "6.2.12",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.3",
+    "drizzle-kit": "0.31.11",
+    "eslint": "^10.11.0",
+    "jiti": "2.6.1",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1",
+    "vitest": "^5.0.2"
+  }
+}
