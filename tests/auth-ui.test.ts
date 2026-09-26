@@ -11,7 +11,15 @@ import {
   renderSignInPage,
   renderSignUpPage,
 } from "../src/ui/pages.js";
-import { googleOAuthCallbackPath } from "../src/config/env.js";
+import { googleOAuthCallbackPath, publicOrigin } from "../src/config/env.js";
+import { trustedForwardOrigin } from "../src/server/request-origin.js";
+import type { IncomingMessage } from "node:http";
+
+function fakeRequest(
+  headers: Record<string, string | undefined>,
+): IncomingMessage {
+  return { headers } as IncomingMessage;
+}
 
 describe("auth display helpers", () => {
   it("maps MCP scopes to human labels and hides oidc noise", () => {
@@ -42,6 +50,22 @@ describe("auth display helpers", () => {
 
   it("documents the Better Auth Google callback path", () => {
     expect(googleOAuthCallbackPath).toBe("/api/auth/callback/google");
+  });
+
+  it("forwards a trusted Origin for Better Auth CSRF on server-side auth posts", () => {
+    expect(
+      trustedForwardOrigin(
+        fakeRequest({ origin: "https://nativenotes.vercel.app" }),
+      ),
+    ).toBe("https://nativenotes.vercel.app");
+    expect(
+      trustedForwardOrigin(
+        fakeRequest({
+          referer: "https://nativenotes.vercel.app/sign-in?x=1",
+        }),
+      ),
+    ).toBe("https://nativenotes.vercel.app");
+    expect(trustedForwardOrigin(fakeRequest({}))).toBe(publicOrigin);
   });
 });
 

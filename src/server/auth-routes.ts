@@ -7,6 +7,7 @@ import {
   renderSignUpPage,
   renderSimpleStatusPage,
 } from "../ui/pages.js";
+import { trustedForwardOrigin } from "./request-origin.js";
 
 function oauthQueryFromRequest(request: IncomingMessage): string {
   const url = new URL(request.url ?? "/", env.BETTER_AUTH_URL);
@@ -29,6 +30,7 @@ async function forwardAuthJson(
     headers: {
       "content-type": "application/json",
       accept: "application/json",
+      origin: trustedForwardOrigin(request),
       ...(request.headers.cookie
         ? {
             cookie: Array.isArray(request.headers.cookie)

@@ -11,6 +11,7 @@ import {
   renderSimpleStatusPage,
   type OrganizationOption,
 } from "../ui/pages.js";
+import { trustedForwardOrigin } from "./request-origin.js";
 
 type Organization = OrganizationOption;
 type OrganizationApi = {
@@ -120,6 +121,7 @@ async function completeConsent(input: {
       headers: {
         "content-type": "application/json",
         accept: "application/json",
+        origin: trustedForwardOrigin(request),
         cookie: request.headers.cookie ?? "",
       },
       body: JSON.stringify({
