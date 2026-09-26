@@ -30,6 +30,12 @@ const nodeEnvSchema = z
   .enum(["development", "test", "production"])
   .default("development");
 
+const optionalNonEmptyString = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().min(1).optional(),
+);
+
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
   DATABASE_URL_UNPOOLED: z.string().min(1).optional(),
@@ -44,6 +50,8 @@ const schema = z.object({
     .transform((value) => value.replace(/\/$/, "")),
   TRUSTED_ORIGINS: z.string().optional(),
   NEON_BRANCH: z.string().optional(),
+  GOOGLE_CLIENT_ID: optionalNonEmptyString,
+  GOOGLE_CLIENT_SECRET: optionalNonEmptyString,
   NODE_ENV: nodeEnvSchema,
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
 });
@@ -67,6 +75,8 @@ export const env = schema.parse({
   TENANT_CLAIM_NAMESPACE: process.env.TENANT_CLAIM_NAMESPACE,
   TRUSTED_ORIGINS: process.env.TRUSTED_ORIGINS,
   NEON_BRANCH: process.env.NEON_BRANCH,
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
   NODE_ENV: nodeEnv,
   PORT: process.env.PORT,
 });
@@ -75,6 +85,17 @@ if (env.NODE_ENV === "production") {
   assertProductionHttpsOrigin(env.BETTER_AUTH_URL, "BETTER_AUTH_URL");
   assertProductionHttpsOrigin(env.MCP_RESOURCE_URL, "MCP_RESOURCE_URL");
 }
+
+/** True when both Google OAuth credentials are configured. */
+export const googleOAuthEnabled = Boolean(
+  env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET,
+);
+
+/**
+ * Better Auth Google callback path (basePath `/api/auth` + `/callback/google`).
+ * Confirmed against better-auth 1.7.6 `getOAuthCallbackPath`.
+ */
+export const googleOAuthCallbackPath = "/api/auth/callback/google";
 
 /** Canonical public origin (no path). Prefer configuring BETTER_AUTH_URL to this. */
 export const publicOrigin = new URL(env.BETTER_AUTH_URL).origin;

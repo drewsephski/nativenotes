@@ -38,6 +38,19 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  // Default account linking: verified same-email Google accounts link to an
+  // existing email/password user. allowDifferentEmails stays disabled.
+  socialProviders: (() => {
+    const clientId = env.GOOGLE_CLIENT_ID;
+    const clientSecret = env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return {};
+    return {
+      google: {
+        clientId,
+        clientSecret,
+      },
+    };
+  })(),
   plugins: [
     organization(),
     jwt({ jwt: { issuer: betterAuthIssuer } }),
