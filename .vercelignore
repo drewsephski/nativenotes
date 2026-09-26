@@ -1,0 +1,14 @@
+.env
+.env.*
+**/.env
+**/.env.*
+.neon
+.agents
+dist
+**/*.tsbuildinfo
+node_modules
+**/node_modules
+**/.next
+.git
+.vercel
+**/.vercel

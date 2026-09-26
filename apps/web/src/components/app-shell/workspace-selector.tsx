@@ -46,7 +46,9 @@ export function WorkspaceSelector({ className }: WorkspaceSelectorProps) {
 
   const loading = orgsPending || activePending;
   const list = organizations ?? [];
-  const active = activeOrganization ?? list[0];
+  // A fresh login can have memberships without an active session workspace.
+  // Do not mark the first membership active until setActive succeeds.
+  const active = activeOrganization;
 
   async function handleSelect(organizationId: string) {
     if (organizationId === active?.id) return;

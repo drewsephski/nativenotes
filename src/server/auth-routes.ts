@@ -8,10 +8,7 @@ import {
   renderSignUpPage,
   renderSimpleStatusPage,
 } from "../ui/pages.js";
-import {
-  isExternalAuthRedirect,
-  sanitizeOAuthQuery,
-} from "./auth-forward.js";
+import { isExternalAuthRedirect, sanitizeOAuthQuery } from "./auth-forward.js";
 import {
   resolvePostLoginLocation,
   resolveSocialCallbackURL,
@@ -21,7 +18,12 @@ import { trustedForwardOrigin } from "./request-origin.js";
 
 function oauthQueryFromRequest(request: IncomingMessage): string {
   const url = new URL(request.url ?? "/", env.BETTER_AUTH_URL);
-  return sanitizeOAuthQuery(url.searchParams.toString());
+  const explicit = url.searchParams.get("oauth_query");
+  if (explicit !== null) return sanitizeOAuthQuery(explicit);
+  // Better Auth sends signed authorize parameters directly on the login URL.
+  return url.searchParams.has("client_id")
+    ? sanitizeOAuthQuery(url.searchParams.toString())
+    : "";
 }
 
 /**
@@ -36,7 +38,9 @@ function callbackURLFromRequest(request: IncomingMessage): string | undefined {
   );
 }
 
-function sanitizeCallbackURL(value: string | null | undefined): string | undefined {
+function sanitizeCallbackURL(
+  value: string | null | undefined,
+): string | undefined {
   return sanitizeTrustedCallbackURL(value, trustedOrigins);
 }
 
@@ -58,8 +62,7 @@ async function forwardAuthJson(
   }
 
   // In-process Better Auth call — never HTTP self-fetch.
-  // Public fetch(BETTER_AUTH_URL) hits Vercel apex→www 308 and was incorrectly
-  // forwarded to the browser as Location: /api/auth/sign-in/social.
+  // Keeps canonical identity independent of the physical rewrite destination.
   const upstream = await auth.handler(
     new Request(new URL(path, env.BETTER_AUTH_URL), {
       method: "POST",
@@ -84,7 +87,13 @@ async function forwardAuthJson(
   if (setCookie.length > 0) response.setHeader("set-cookie", setCookie);
 
   const location = upstream.headers.get("location");
-  if (location && isExternalAuthRedirect(location)) {
+  if (
+    location &&
+    upstream.status >= 300 &&
+    upstream.status < 400 &&
+    (oauthQuery ||
+      (path === "/api/auth/sign-in/social" && isExternalAuthRedirect(location)))
+  ) {
     response.writeHead(303, {
       location,
       "cache-control": "no-store",
@@ -159,7 +168,7 @@ async function forwardAuthJson(
     return;
   }
 
-  if (redirectUri) {
+  if (redirectUri && (oauthQuery || path === "/api/auth/sign-in/social")) {
     response.writeHead(303, {
       location: redirectUri,
       "cache-control": "no-store",
@@ -219,7 +228,7 @@ export async function handleSignInRoute(
   }
 
   const body = await readBody(request);
-  const formCallbackURL = sanitizeCallbackURL(body.callbackURL);
+  const formCallbackURL = sanitizeCallbackURL(body.callbackURL) ?? callbackURL;
   const formOAuthQuery = sanitizeOAuthQuery(body.oauth_query ?? oauthQuery);
   if (!body.email || !body.password) {
     writeHtml(
@@ -238,7 +247,9 @@ export async function handleSignInRoute(
   await forwardAuthJson(request, response, "/api/auth/sign-in/email", {
     email: body.email,
     password: body.password,
-    ...(formCallbackURL ? { callbackURL: formCallbackURL } : {}),
+    ...(!formOAuthQuery && formCallbackURL
+      ? { callbackURL: formCallbackURL }
+      : {}),
     ...(formOAuthQuery ? { oauth_query: formOAuthQuery } : {}),
   });
 }
@@ -270,7 +281,7 @@ export async function handleSignUpRoute(
   }
 
   const body = await readBody(request);
-  const formCallbackURL = sanitizeCallbackURL(body.callbackURL);
+  const formCallbackURL = sanitizeCallbackURL(body.callbackURL) ?? callbackURL;
   const formOAuthQuery = sanitizeOAuthQuery(body.oauth_query ?? oauthQuery);
   if (!body.name || !body.email || !body.password) {
     writeHtml(
@@ -294,7 +305,9 @@ export async function handleSignUpRoute(
       name: body.name,
       email: body.email,
       password: body.password,
-      ...(formCallbackURL ? { callbackURL: formCallbackURL } : {}),
+      ...(!formOAuthQuery && formCallbackURL
+        ? { callbackURL: formCallbackURL }
+        : {}),
       ...(formOAuthQuery ? { oauth_query: formOAuthQuery } : {}),
     },
     { mode: "sign-up" },
@@ -331,11 +344,15 @@ export async function handleGoogleSignInRoute(
   }
 
   const body = await readBody(request);
-  const oauthQuery = sanitizeOAuthQuery(body.oauth_query ?? "");
-  const formCallbackURL = sanitizeCallbackURL(body.callbackURL);
+  const oauthQuery = sanitizeOAuthQuery(
+    body.oauth_query ?? oauthQueryFromRequest(request),
+  );
+  const formCallbackURL =
+    sanitizeCallbackURL(body.callbackURL) ?? callbackURLFromRequest(request);
   const socialCallbackURL = resolveSocialCallbackURL({
     oauthQuery,
     callbackURL: formCallbackURL,
+    betterAuthUrl: env.BETTER_AUTH_URL,
     trustedOrigins,
   });
 

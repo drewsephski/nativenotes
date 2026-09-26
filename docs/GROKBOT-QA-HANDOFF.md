@@ -1,7 +1,9 @@
 # Grokbot computer-use QA handoff — NativeNotes Google OAuth / ChatGPT
 
-Production origin: `https://nativenotes.vercel.app`  
-MCP resource: `https://nativenotes.vercel.app/mcp`  
+Production origin: `https://nativenotes.app`
+
+MCP resource: `https://nativenotes.app/mcp`
+
 Source checklist: [`docs/QA.md`](./QA.md)
 
 ## Mission
@@ -42,8 +44,8 @@ When fixing reproducible UI/auth bugs:
 
 1. Production has `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 2. Google Cloud OAuth client redirect URI exactly:
-   `https://nativenotes.vercel.app/api/auth/callback/google`
-3. ChatGPT custom MCP points at `https://nativenotes.vercel.app/mcp`.
+   `https://nativenotes.app/api/auth/callback/google`
+3. ChatGPT custom MCP points at `https://nativenotes.app/mcp`.
 4. Optional email/password test user for fallback cases.
 
 ## Required scenarios
@@ -60,7 +62,7 @@ Execute and record Pass/Fail for each:
 
 ### ChatGPT redirect / login / consent
 
-1. ChatGPT custom MCP → `https://nativenotes.vercel.app/mcp`.
+1. ChatGPT custom MCP → `https://nativenotes.app/mcp`.
 2. Land on NativeNotes sign-in with OAuth continuation (ChatGPT banner when from MCP).
 3. Continue with Google → `accounts.google.com`.
 4. Return to NativeNotes consent with ChatGPT client + original scopes/resource preserved (`oauth_query` must survive Google).
@@ -112,6 +114,6 @@ For each scenario:
 
 ## Suggested first probe
 
-1. `GET https://nativenotes.vercel.app/sign-in` — polished UI, Google primary, email fallback.
+1. `GET https://nativenotes.app/sign-in` — polished UI, Google primary, email fallback.
 2. Click `[data-testid="google-sign-in"]` — must reach `accounts.google.com` (not “Missing or null Origin”).
 3. Stop before completing Google login if interactive account selection requires the human operator; hand off remaining ChatGPT steps to the operator when needed.

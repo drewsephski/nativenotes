@@ -44,9 +44,15 @@ export function validateBackendOrigin(
     );
   }
 
-  if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
+  if (
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash ||
+    parsed.username ||
+    parsed.password
+  ) {
     throw new Error(
-      "NATIVE_NOTES_BACKEND_ORIGIN must be an origin only (no path, query, or fragment)",
+      "NATIVE_NOTES_BACKEND_ORIGIN must be an origin only (no path, query, fragment, or credentials)",
     );
   }
 
@@ -61,7 +67,11 @@ export function validateBackendOrigin(
       "NATIVE_NOTES_BACKEND_ORIGIN must be https:// in production",
     );
   }
-  if (!requireHttps && parsed.protocol !== "https:" && !isLoopback) {
+  if (
+    !requireHttps &&
+    parsed.protocol !== "https:" &&
+    !(parsed.protocol === "http:" && isLoopback)
+  ) {
     throw new Error(
       "NATIVE_NOTES_BACKEND_ORIGIN must use https:// (http only on loopback)",
     );

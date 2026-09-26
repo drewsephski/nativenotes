@@ -53,7 +53,8 @@ describe("auth redirect intent", () => {
 
   it("both oauth_query and callbackURL → OAuth wins", () => {
     const intent = resolvePostLoginIntent({
-      oauthQuery: "client_id=https://chatgpt.com/oauth/client.json&scope=openid",
+      oauthQuery:
+        "client_id=https://chatgpt.com/oauth/client.json&scope=openid",
       callbackURL: "https://nativenotes.app/app",
       betterAuthUrl,
       trustedOrigins: trusted,
@@ -75,25 +76,28 @@ describe("auth redirect intent", () => {
     ).toBe("/app");
   });
 
-  it("Google social callback with oauth_query prefers OAuth safety net /app", () => {
+  it("Google social callback with oauth_query continues authorize even as fallback", () => {
     expect(
       resolveSocialCallbackURL({
+        betterAuthUrl,
         oauthQuery:
           "client_id=https://chatgpt.com/oauth/client.json&scope=mcp:read",
         callbackURL: "https://nativenotes.app/app",
         trustedOrigins: trusted,
       }),
-    ).toBe("/app");
+    ).toContain("https://nativenotes.app/api/auth/oauth2/authorize?");
   });
 
   it("Google social without callback defaults to /app (never /)", () => {
     expect(
       resolveSocialCallbackURL({
+        betterAuthUrl,
         trustedOrigins: trusted,
       }),
     ).toBe("/app");
     expect(
       resolveSocialCallbackURL({
+        betterAuthUrl,
         callbackURL: "https://evil.example/",
         trustedOrigins: trusted,
       }),
@@ -103,6 +107,7 @@ describe("auth redirect intent", () => {
   it("Google social with trusted callbackURL uses it", () => {
     expect(
       resolveSocialCallbackURL({
+        betterAuthUrl,
         callbackURL: "https://nativenotes.app/app",
         trustedOrigins: trusted,
       }),
