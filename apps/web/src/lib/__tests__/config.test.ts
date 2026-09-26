@@ -21,6 +21,7 @@ test("production browser always uses same origin despite a stale public backend 
 test("local development keeps dual ports", () => {
   vi.stubEnv("NODE_ENV", "development");
   vi.stubEnv("NEXT_PUBLIC_NATIVE_NOTES_API_URL", "http://localhost:3000");
+  vi.stubEnv("NEXT_PUBLIC_WEB_ORIGIN", "");
   vi.stubGlobal("window", undefined);
   expect(getNativeNotesApiUrl()).toBe("http://localhost:3000");
   expect(getSignInUrl()).toContain(
