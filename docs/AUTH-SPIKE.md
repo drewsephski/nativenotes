@@ -65,15 +65,21 @@ plugins: [
 ### Google OAuth
 
 - Provider: Better Auth built-in `socialProviders.google`
-- Callback (better-auth 1.7.6, `basePath: /api/auth`): `https://nativenotes.vercel.app/api/auth/callback/google`
+- Canonical production callback: `https://nativenotes.app/api/auth/callback/google`
+- Temporary during rollout: `https://nativenotes.vercel.app/api/auth/callback/google` (remove after cutover)
 - Local callback: `http://localhost:3000/api/auth/callback/google`
 - App route `POST /sign-in/google` forwards to `/api/auth/sign-in/social` with `provider: "google"` and optional `oauth_query`
 - OAuth Provider hooks store `oauth_query` in OAuth serverContext on `/sign-in/social`, so ChatGPT authorize state survives the Google round trip
+- Post-login intent (`src/server/auth-redirect-intent.ts`): `oauth_query` > trusted `callbackURL` > `/app` (never `/`)
 - Account linking: Better Auth defaults (enabled). Verified same-email Google accounts link to existing email/password users. `allowDifferentEmails` is not enabled.
 
 ### Auth / consent UI
 
-Server-rendered HTML + CSS design tokens in `src/ui/` (no Next.js, no SPA framework). Pages: `/sign-in`, `/sign-up`, `/oauth/consent`. Grokbot anchors and scenarios: `docs/QA.md`.
+Server-rendered HTML + CSS design tokens in `src/ui/` (no SPA framework). Pages: `/sign-in`, `/sign-up`, `/oauth/consent`. In production these are reached at `https://nativenotes.app/...` via Next.js external rewrites to the Node backend project. Grokbot anchors and scenarios: `docs/QA.md`.
+
+### Unified production routing
+
+The public surface is the Next.js app (`apps/web`) on `https://nativenotes.app`. The Node MCP/auth backend stays a separate Vercel project. Backend-owned paths are proxied with explicit rewrites (`NATIVE_NOTES_BACKEND_ORIGIN`). Canonical `BETTER_AUTH_URL` / `MCP_RESOURCE_URL` / claim namespace must use the public domain so issuer, PRM, Google callbacks, and ChatGPT MCP config never advertise the private backend hostname. See `docs/DEPLOYMENT.md#unified-production-routing`.
 
 `mcp()` already composes the OAuth Provider behavior. No separate `oauthProvider()` registration is used. `jwt()` is required for the signing keys and JWKS endpoint. The application uses the generated Better Auth Drizzle schema; Better Auth internal tables are not hand-created.
 
@@ -410,5 +416,5 @@ Remaining risks:
 - ChatGPT may prefer `private_key_jwt` over `none`; assertion verification depends on Better Auth fetching ChatGPT JWKS through the same protected transport.
 - Authorization-code `referenceId` is only inspectable before code exchange.
 - Auth failure responses intentionally return machine-readable JSON without stack traces; operators should rely on server logs for unexpected failures.
-- `nativenotes.vercel.app` is the interim canonical issuer/resource; attaching a custom domain requires updating `BETTER_AUTH_URL`, `MCP_RESOURCE_URL`, and `TENANT_CLAIM_NAMESPACE` together and redeploying.
+- Canonical public origin is `https://nativenotes.app` (Next.js + rewrites). Updating `BETTER_AUTH_URL`, `MCP_RESOURCE_URL`, and `TENANT_CLAIM_NAMESPACE` must happen together when rotating the public domain; the backend rewrite hostname must never become the issuer.
 - Interactive ChatGPT Org A / refresh / membership / Org B proofs require a Developer Mode workspace and redeploy of consent/logging/tool-metadata changes.

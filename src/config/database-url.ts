@@ -141,3 +141,20 @@ export function assertProductionHttpsOrigin(url: string, name: string): void {
     throw new Error(`${name} must use HTTPS in production`);
   }
 }
+
+/**
+ * Issuer and MCP resource must share one public origin.
+ * Apex vs www (or any other host split) breaks OAuth audience matching.
+ */
+export function assertAuthAndResourceOriginsAlign(
+  betterAuthUrl: string,
+  mcpResourceUrl: string,
+): void {
+  const authOrigin = new URL(betterAuthUrl).origin;
+  const resourceOrigin = new URL(mcpResourceUrl).origin;
+  if (authOrigin !== resourceOrigin) {
+    throw new Error(
+      `BETTER_AUTH_URL origin (${authOrigin}) must match MCP_RESOURCE_URL origin (${resourceOrigin}). Pick one public host (apex or www) and use it for both.`,
+    );
+  }
+}

@@ -12,6 +12,11 @@ import {
   isExternalAuthRedirect,
   sanitizeOAuthQuery,
 } from "./auth-forward.js";
+import {
+  resolvePostLoginLocation,
+  resolveSocialCallbackURL,
+  sanitizeTrustedCallbackURL,
+} from "./auth-redirect-intent.js";
 import { trustedForwardOrigin } from "./request-origin.js";
 
 function oauthQueryFromRequest(request: IncomingMessage): string {
@@ -25,18 +30,14 @@ function oauthQueryFromRequest(request: IncomingMessage): string {
  */
 function callbackURLFromRequest(request: IncomingMessage): string | undefined {
   const url = new URL(request.url ?? "/", env.BETTER_AUTH_URL);
-  return sanitizeCallbackURL(url.searchParams.get("callbackURL"));
+  return sanitizeTrustedCallbackURL(
+    url.searchParams.get("callbackURL"),
+    trustedOrigins,
+  );
 }
 
 function sanitizeCallbackURL(value: string | null | undefined): string | undefined {
-  if (!value || value.trim().length === 0) return undefined;
-  try {
-    const parsed = new URL(value);
-    if (!trustedOrigins.includes(parsed.origin)) return undefined;
-    return parsed.toString();
-  } catch {
-    return undefined;
-  }
+  return sanitizeTrustedCallbackURL(value, trustedOrigins);
 }
 
 async function forwardAuthJson(
@@ -167,19 +168,13 @@ async function forwardAuthJson(
     return;
   }
 
-  const next =
-    oauthQuery.length > 0
-      ? (() => {
-          const authorizeUrl = new URL(
-            "/api/auth/oauth2/authorize",
-            env.BETTER_AUTH_URL,
-          );
-          authorizeUrl.search = oauthQuery;
-          return authorizeUrl.toString();
-        })()
-      : typeof payload.callbackURL === "string" && payload.callbackURL.length > 0
-        ? payload.callbackURL
-        : "/";
+  const next = resolvePostLoginLocation({
+    oauthQuery,
+    callbackURL:
+      typeof payload.callbackURL === "string" ? payload.callbackURL : undefined,
+    betterAuthUrl: env.BETTER_AUTH_URL,
+    trustedOrigins,
+  });
 
   response.writeHead(303, {
     location: next,
@@ -338,10 +333,15 @@ export async function handleGoogleSignInRoute(
   const body = await readBody(request);
   const oauthQuery = sanitizeOAuthQuery(body.oauth_query ?? "");
   const formCallbackURL = sanitizeCallbackURL(body.callbackURL);
+  const socialCallbackURL = resolveSocialCallbackURL({
+    oauthQuery,
+    callbackURL: formCallbackURL,
+    trustedOrigins,
+  });
 
   await forwardAuthJson(request, response, "/api/auth/sign-in/social", {
     provider: "google",
-    callbackURL: formCallbackURL ?? "/",
+    callbackURL: socialCallbackURL,
     ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
   });
 }

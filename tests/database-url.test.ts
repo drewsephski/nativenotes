@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assertAuthAndResourceOriginsAlign,
   assertProductionHttpsOrigin,
   assertSafeTestDatabaseUrl,
   isNeonPooledConnectionString,
@@ -76,6 +77,21 @@ describe("production URL HTTPS requirements", () => {
       assertProductionHttpsOrigin(
         "https://notes.example.com",
         "BETTER_AUTH_URL",
+      ),
+    ).not.toThrow();
+  });
+
+  it("requires BETTER_AUTH_URL and MCP_RESOURCE_URL share one origin", () => {
+    expect(() =>
+      assertAuthAndResourceOriginsAlign(
+        "https://www.nativenotes.app",
+        "https://nativenotes.app/mcp",
+      ),
+    ).toThrow(/must match MCP_RESOURCE_URL origin/);
+    expect(() =>
+      assertAuthAndResourceOriginsAlign(
+        "https://www.nativenotes.app",
+        "https://www.nativenotes.app/mcp",
       ),
     ).not.toThrow();
   });

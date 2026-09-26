@@ -30,18 +30,119 @@ The app keeps `postgres` (postgres.js) + Drizzle. Do not switch drivers merely b
 
 ## Vercel
 
+NativeNotes uses **two** Vercel projects. Do not migrate the Node backend into Next.js. Do not delete the existing backend project.
+
+### Project A — NativeNotes backend
+
 Entrypoint: root [`server.ts`](../server.ts). Vercel detects `server.ts` / `src/server.ts` and captures `server.listen()` ([Node.js runtime](https://vercel.com/docs/functions/runtimes/node-js)).
 
 Routing stays in [`src/server/index.ts`](../src/server/index.ts). There is a single request listener; tests call `startNativeNotesServer()` from that module. Root `server.ts` exists so the entrypoint does not collide with the `src/server/` directory.
 
+- **Root directory:** repository root
+- **Custom domain:** none required (keep the stable `*.vercel.app` hostname for rewrites)
+- Optional minimal [`vercel.json`](../vercel.json) only sets `maxDuration` for the Node server entrypoint
+
 Local:
 
 ```sh
-pnpm dev   # tsx watch server.ts
+pnpm dev   # tsx watch server.ts → http://localhost:3000
 ```
 
-Deploy: connect the GitHub repo to Vercel, set environment variables, deploy. No Next.js. Optional minimal [`vercel.json`](../vercel.json) only sets `maxDuration` for the Node server entrypoint.
+### Project B — NativeNotes web (public surface)
 
+- **Root directory:** `apps/web`
+- **Framework:** Next.js
+- **Custom domain:** `nativenotes.app` (and `www` if used) — attach here only
+- **Server-only env:** `NATIVE_NOTES_BACKEND_ORIGIN=https://nativenotes.vercel.app` (or the backend project’s stable production hostname)
+  - Absolute `https://` origin
+  - Must **not** be `https://nativenotes.app` (rewrite loop)
+  - Never expose as `NEXT_PUBLIC_*`
+- Leave `NEXT_PUBLIC_NATIVE_NOTES_API_URL` **unset** in production so the browser uses same-origin `https://nativenotes.app`
+
+Local:
+
+```sh
+pnpm dev:web   # next dev → http://localhost:3001
+```
+
+External rewrites are defined in [`apps/web/next.config.ts`](../apps/web/next.config.ts) via [`apps/web/src/lib/backend-rewrites.ts`](../apps/web/src/lib/backend-rewrites.ts). Query strings are preserved. There is no blanket catch-all rewrite; Next retains `/`, `/app`, `/app/*`, and `_next/*`.
+
+## Unified production routing
+
+Canonical public domain: **https://nativenotes.app** (or `www` — pick **one** host and use it everywhere).
+
+### Apex vs www (required)
+
+Vercel may attach both `nativenotes.app` and `www.nativenotes.app`. One must be primary; the other should 308 to it.
+
+**Today’s backend project** currently redirects apex → `www.nativenotes.app`. Until that is reversed, production env must use **www** as the single public origin:
+
+| Variable | Must match the Vercel primary host |
+| --- | --- |
+| `BETTER_AUTH_URL` | `https://www.nativenotes.app` |
+| `MCP_RESOURCE_URL` | `https://www.nativenotes.app/mcp` |
+| `TENANT_CLAIM_NAMESPACE` | `https://www.nativenotes.app/claims` |
+| `TRUSTED_ORIGINS` | `https://www.nativenotes.app` (optionally also apex) |
+
+Do **not** mix apex issuer with www resource (or the reverse). Smoke and boot both fail on that split.
+
+Preferred long-term (matches docs that cite apex): in Vercel Domains, set `www` → redirect to `nativenotes.app`, then flip all four vars to apex and redeploy.
+
+| Path | Serves |
+| --- | --- |
+| `/`, `/app`, `/app/*` | Next.js |
+| `/sign-in`, `/sign-up`, `/sign-in/google` | Backend (rewrite) |
+| `/oauth/consent` | Backend (rewrite) |
+| `/api/auth/*`, `/api/notes`, `/api/notes/*` | Backend (rewrite) |
+| `/.well-known/*`, `/mcp`, `/health` | Backend (rewrite) |
+
+### Canonical backend identity (public domain)
+
+Even though requests are physically proxied to the backend project, OAuth issuer / resource / redirects must advertise the public origin:
+
+| Variable | Production value |
+| --- | --- |
+| `BETTER_AUTH_URL` | `https://nativenotes.app` |
+| `MCP_RESOURCE_URL` | `https://nativenotes.app/mcp` |
+| `TENANT_CLAIM_NAMESPACE` | `https://nativenotes.app/claims` |
+| `TRUSTED_ORIGINS` | `https://nativenotes.app` |
+
+The internal backend deployment URL must **never** appear in OAuth issuer metadata, protected resource metadata, user redirects, Google callback URLs (after cutover), or ChatGPT MCP configuration.
+
+### Login intent
+
+1. **OAuth/MCP** (`oauth_query` present): continue Better Auth authorize → consent → external client callback. Wins over `callbackURL`. Never divert to `/app` before OAuth completes.
+2. **Web app** (trusted `callbackURL`): redirect there (typically `https://nativenotes.app/app`).
+3. **Default**: `/app` (never `/`).
+
+Trusted callbacks are restricted to `trustedOrigins` (open redirects rejected).
+
+### Safe cutover order
+
+1. Deploy updated backend while the old public URL still works.
+2. Add Google authorized redirect URI `https://nativenotes.app/api/auth/callback/google` (keep the old `nativenotes.vercel.app` URI temporarily).
+3. Create/deploy the web Vercel project (`apps/web`).
+4. Set web `NATIVE_NOTES_BACKEND_ORIGIN` to the backend project hostname.
+5. Verify a web preview with rewrites (`/health`, auth metadata, cookies).
+6. Point `nativenotes.app` at the **web** project.
+7. Update backend canonical `BETTER_AUTH_URL` / `MCP_RESOURCE_URL` / `TENANT_CLAIM_NAMESPACE` / `TRUSTED_ORIGINS` to `https://nativenotes.app`.
+8. Redeploy backend.
+9. Redeploy web if needed.
+10. Run `pnpm smoke:remote https://nativenotes.app` and manual smoke (app login, ChatGPT MCP).
+11. Reconnect ChatGPT using `https://nativenotes.app/mcp`.
+12. Only after green: remove obsolete Google callback / ChatGPT config pointing at the backend hostname.
+
+### Stop conditions
+
+Stop and report (do not weaken security) if:
+
+- external rewrites break `Set-Cookie`
+- Google OAuth callback loses state
+- ChatGPT OAuth redirects to `/app` prematurely
+- OAuth metadata exposes the internal backend origin
+- MCP resource/audience no longer matches
+- production requires wildcard CORS
+- a rewrite loop occurs
 ## Environment variables
 
 See [`.env.example`](../.env.example).
@@ -71,19 +172,21 @@ Better Auth 1.7.6 callback path (with `basePath: /api/auth`):
 | Environment | Authorized redirect URI |
 | --- | --- |
 | Local | `http://localhost:3000/api/auth/callback/google` |
-| Production | `https://nativenotes.vercel.app/api/auth/callback/google` |
+| Production (canonical) | `https://nativenotes.app/api/auth/callback/google` |
+| Temporary during rollout | `https://nativenotes.vercel.app/api/auth/callback/google` |
 
-Set both URIs on the same Google Cloud OAuth Web client. Without `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, the Google button is disabled and email/password remains available.
+Set the local + canonical URIs on the same Google Cloud OAuth Web client. Keep the temporary backend hostname URI only until cutover smoke is green, then remove it. Without `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, the Google button is disabled and email/password remains available.
 
 Account linking uses Better Auth defaults: a verified Google email matching an existing email/password user is linked to that user (`allowDifferentEmails` is not enabled).
 
-Production **requires HTTPS** for `BETTER_AUTH_URL` and `MCP_RESOURCE_URL`. Do not hardcode temporary `*.vercel.app` URLs in source; set them (or a custom domain) in the environment.
+Production **requires HTTPS** for `BETTER_AUTH_URL` and `MCP_RESOURCE_URL`. Configure the **public** domain (`https://nativenotes.app`), not the private backend rewrite hostname, as the canonical issuer/resource.
 
 Conceptual production layout:
 
-- `https://<domain>`
-- `https://<domain>/api/auth` (issuer / Better Auth)
-- `https://<domain>/mcp` (canonical MCP resource)
+- `https://nativenotes.app` (Next.js)
+- `https://nativenotes.app/app` (dashboard)
+- `https://nativenotes.app/api/auth` (issuer / Better Auth via rewrite)
+- `https://nativenotes.app/mcp` (canonical MCP resource via rewrite)
 
 ## Migrations
 
@@ -146,7 +249,7 @@ For each client (ChatGPT, Cursor, Claude Code):
 ## Smoke testing
 
 ```sh
-pnpm smoke:remote https://your-domain.com
+pnpm smoke:remote https://nativenotes.app
 ```
 
 Checks (no secrets):
@@ -156,6 +259,7 @@ Checks (no secrets):
 - protected resource metadata (canonical `/mcp`, matching authorization server)
 - JWKS
 - anonymous `POST /mcp` → 401 Bearer
+- when targeting `nativenotes.app`: metadata must not mention `nativenotes.vercel.app`
 
 ## Production MCP interoperability proof
 

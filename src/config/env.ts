@@ -2,6 +2,7 @@ import "dotenv/config";
 import { z } from "zod";
 
 import {
+  assertAuthAndResourceOriginsAlign,
   assertProductionHttpsOrigin,
   resolveRuntimeDatabaseUrl,
 } from "./database-url.js";
@@ -85,6 +86,8 @@ if (env.NODE_ENV === "production") {
   assertProductionHttpsOrigin(env.BETTER_AUTH_URL, "BETTER_AUTH_URL");
   assertProductionHttpsOrigin(env.MCP_RESOURCE_URL, "MCP_RESOURCE_URL");
 }
+
+assertAuthAndResourceOriginsAlign(env.BETTER_AUTH_URL, env.MCP_RESOURCE_URL);
 
 /** True when both Google OAuth credentials are configured. */
 export const googleOAuthEnabled = Boolean(

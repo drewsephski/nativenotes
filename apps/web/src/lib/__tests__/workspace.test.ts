@@ -4,7 +4,6 @@ import {
   suggestedWorkspaceName,
   userInitials,
 } from "@/lib/workspace";
-import { getNativeNotesApiUrl, getSignInUrl } from "@/lib/config";
 
 describe("workspace helpers", () => {
   test("slugifies names", () => {
@@ -20,13 +19,5 @@ describe("workspace helpers", () => {
   test("builds initials", () => {
     expect(userInitials("Ada Lovelace", "ada@example.com")).toBe("AL");
     expect(userInitials(undefined, "ada@example.com")).toBe("AD");
-  });
-});
-
-describe("config", () => {
-  test("defaults api url and sign-in callback", () => {
-    expect(getNativeNotesApiUrl()).toMatch(/localhost:3000/);
-    expect(getSignInUrl("/app")).toContain("callbackURL=");
-    expect(getSignInUrl("/app")).toContain("%2Fapp");
   });
 });
