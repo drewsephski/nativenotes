@@ -103,6 +103,7 @@ describe("note.list tenant scope", () => {
             tenantId,
             title: "Scoped note",
             body: "body",
+            version: 1,
             createdAt: new Date("2026-01-01T00:00:00.000Z"),
             updatedAt: new Date("2026-01-01T00:00:00.000Z"),
           },
@@ -110,6 +111,12 @@ describe("note.list tenant scope", () => {
       },
       async create() {
         throw new Error("create should not be called");
+      },
+      async update() {
+        throw new Error("update should not be called");
+      },
+      async findByTenantAndId() {
+        return null;
       },
     };
 
@@ -129,6 +136,7 @@ describe("note.list tenant scope", () => {
           id: "note-a",
           title: "Scoped note",
           body: "body",
+          version: 1,
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
