@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { formatRelativeTime } from "@/lib/mock-data";
+import { formatRelativeTime } from "@/lib/date";
 import type { NoteListItem } from "@/lib/notes-api";
 import { EmptyState } from "@/components/app-shell/empty-state";
 
@@ -11,6 +11,7 @@ interface NotesListProps {
   onSelect: (note: NoteListItem) => void;
   emptyTitle?: string;
   emptyDescription?: string;
+  onCreateNote?: () => void;
   className?: string;
 }
 
@@ -20,6 +21,7 @@ export function NotesList({
   onSelect,
   emptyTitle = "No notes yet.",
   emptyDescription = "Your notes will appear here.",
+  onCreateNote,
   className,
 }: NotesListProps) {
   if (notes.length === 0) {
@@ -27,6 +29,8 @@ export function NotesList({
       <EmptyState
         title={emptyTitle}
         description={emptyDescription}
+        actionLabel={onCreateNote ? "Create note" : undefined}
+        onAction={onCreateNote}
         className={className}
       />
     );

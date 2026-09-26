@@ -108,6 +108,9 @@ describe("note.list tenant scope", () => {
           },
         ];
       },
+      async create() {
+        throw new Error("create should not be called");
+      },
     };
 
     await expect(
