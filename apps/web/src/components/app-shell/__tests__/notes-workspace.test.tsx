@@ -1,478 +1,87 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
-const mockUseActiveOrganization = vi.fn();
-const mockFetchNotes = vi.fn();
-const mockCreateNote = vi.fn();
-const mockUpdateNote = vi.fn();
-
-vi.mock("@/lib/auth-client", () => ({
-  useActiveOrganization: () => mockUseActiveOrganization(),
-}));
-
-vi.mock("@/lib/notes-api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/notes-api")>(
-    "@/lib/notes-api",
-  );
-  return {
-    ...actual,
-    fetchNotes: (...args: unknown[]) => mockFetchNotes(...args),
-    createNote: (...args: unknown[]) => mockCreateNote(...args),
-    updateNote: (...args: unknown[]) => mockUpdateNote(...args),
-  };
-});
-
-import { NotesWorkspace } from "@/components/app-shell/notes-workspace";
-import { NotesApiError } from "@/lib/notes-api";
-
-const noteA = {
-  id: "note_a",
-  title: "Alpha note",
-  body: "Body for alpha",
-  version: 1,
-  createdAt: "2026-09-20T00:00:00.000Z",
-  updatedAt: "2026-09-20T00:00:00.000Z",
-};
-
-const noteB = {
-  id: "note_b",
-  title: "Bravo note",
-  body: "Body for bravo",
-  version: 1,
-  createdAt: "2026-09-21T00:00:00.000Z",
-  updatedAt: "2026-09-21T00:00:00.000Z",
-};
-
-const noteCreated = {
-  id: "note_created",
-  title: "Fresh note",
-  body: "Created body",
-  version: 1,
-  createdAt: "2026-09-26T12:00:00.000Z",
-  updatedAt: "2026-09-26T12:00:00.000Z",
-};
-
-afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
-});
-
-describe("NotesWorkspace real notes loading", () => {
-  beforeEach(() => {
-    mockUseActiveOrganization.mockReturnValue({
-      data: { id: "org_a", name: "Workspace A" },
-      isPending: false,
-    });
-  });
-
-  test("shows loading skeleton while fetching", () => {
-    mockFetchNotes.mockReturnValue(new Promise(() => undefined));
-    render(<NotesWorkspace />);
-    expect(screen.getByLabelText(/loading notes/i)).toBeInTheDocument();
-  });
-
-  test("shows empty state when API returns no notes", async () => {
-    mockFetchNotes.mockResolvedValue([]);
-    render(<NotesWorkspace />);
-    expect(await screen.findByText("No notes yet.")).toBeInTheDocument();
-    expect(
-      screen.getByText("Your notes will appear here."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^create note$/i }),
-    ).toBeInTheDocument();
-  });
-
-  test("shows error with retry", async () => {
-    const user = userEvent.setup();
-    mockFetchNotes.mockRejectedValue(
-      new NotesApiError("unknown", "Could not load notes.", 500),
-    );
-    render(<NotesWorkspace />);
-    expect(await screen.findByText("Could not load notes.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
-
-    mockFetchNotes.mockResolvedValue([noteA]);
-    await user.click(screen.getByRole("button", { name: /retry/i }));
-    expect(await screen.findByDisplayValue("Alpha note")).toBeInTheDocument();
-  });
-
-  test("renders real notes and selects first by default", async () => {
-    mockFetchNotes.mockResolvedValue([noteA, noteB]);
-    render(<NotesWorkspace />);
-    expect(
-      await screen.findByRole("option", { name: /alpha note/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: /bravo note/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Alpha note")).toBeInTheDocument();
-    expect(screen.getByLabelText("Note content")).toHaveValue("Body for alpha");
-  });
-
-  test("selecting a note resets the draft to that note", async () => {
-    const user = userEvent.setup();
-    mockFetchNotes.mockResolvedValue([noteA, noteB]);
-    render(<NotesWorkspace />);
-    await screen.findByRole("option", { name: /alpha note/i });
-    await user.clear(screen.getByLabelText(/^title$/i));
-    await user.type(screen.getByLabelText(/^title$/i), "Dirty alpha");
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("option", { name: /bravo note/i }));
-    expect(screen.getByDisplayValue("Bravo note")).toBeInTheDocument();
-    expect(screen.getByLabelText("Note content")).toHaveValue("Body for bravo");
-    expect(screen.getByText("Saved")).toBeInTheDocument();
-  });
-
-  test("workspace change clears previous notes before refetch", async () => {
-    let resolveA: ((value: typeof noteA[]) => void) | undefined;
-    mockFetchNotes.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveA = resolve as (value: typeof noteA[]) => void;
-        }),
-    );
-
-    const { rerender } = render(<NotesWorkspace />);
-    expect(screen.getByLabelText(/loading notes/i)).toBeInTheDocument();
-    resolveA?.([noteA]);
-    expect(await screen.findByDisplayValue("Alpha note")).toBeInTheDocument();
-
-    let resolveB: ((value: typeof noteB[]) => void) | undefined;
-    mockFetchNotes.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveB = resolve as (value: typeof noteB[]) => void;
-        }),
-    );
-    mockUseActiveOrganization.mockReturnValue({
-      data: { id: "org_b", name: "Workspace B" },
-      isPending: false,
-    });
-    rerender(<NotesWorkspace />);
-
-    await waitFor(() => {
-      expect(screen.queryByDisplayValue("Alpha note")).not.toBeInTheDocument();
-      expect(screen.getByLabelText(/loading notes/i)).toBeInTheDocument();
-    });
-
-    resolveB?.([noteB]);
-    expect(await screen.findByDisplayValue("Bravo note")).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("Alpha note")).not.toBeInTheDocument();
+import { ProductProvider } from "../product-context";
+import { NotesWorkspace } from "../notes-workspace";
+import { FolderTree } from "../folder-tree";
+import { SearchDialog } from "../search-dialog";
+import { TagsPage } from "../tags-page";
+import { InstructionsEditor } from "../instructions-editor";
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), usePathname: () => "/app" }));
+const note = { id: "note-a", title: "Research notes", body: "Useful knowledge", summary: null, folderId: null, favorited: true, freshness: "current", version: 1, createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-01T00:00:00Z" };
+const fetchMock = vi.fn();
+function wrap(children: React.ReactNode, workspaceId = "org-a") { return <ProductProvider key={workspaceId} workspaceId={workspaceId}>{children}</ProductProvider>; }
+beforeEach(() => {
+  vi.clearAllMocks(); vi.stubGlobal("fetch", fetchMock);
+  fetchMock.mockImplementation(async (url: URL, init?: RequestInit) => {
+    if (init?.method === "POST") return Response.json(note);
+    if (url.pathname.endsWith("navigation")) return Response.json({ folders: [], counts: { all: 1, inbox: 1, favorites: 1, archive: 0, trash: 0 }, folderCounts: {} });
+    if (url.pathname.endsWith("tags")) return Response.json({ tags: [{ id: "tag-a", name: "Research", noteCount: 1 }] });
+    if (url.pathname.endsWith("instructions")) return Response.json({ chain: [{ folderId: null, name: "Workspace", scopeType: "workspace", instructions: "Be precise" }] });
+    return Response.json({ notes: [note], hasMore: false });
   });
 });
-
-describe("NotesWorkspace note creation", () => {
-  beforeEach(() => {
-    mockUseActiveOrganization.mockReturnValue({
-      data: { id: "org_a", name: "Workspace A" },
-      isPending: false,
-    });
-    mockFetchNotes.mockResolvedValue([]);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+describe("persisted workspace navigation", () => {
+  it("loads notes with an explicit workspace precondition and links to documents", async () => {
+    render(wrap(<NotesWorkspace />));
+    expect(await screen.findByRole("link", { name: /Research notes/ })).toHaveAttribute("href", "/app/notes/note-a");
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({ headers: expect.objectContaining({ "x-workspace-id": "org-a" }) }));
   });
-
-  test("New note opens the create dialog", async () => {
+  it("uses backend lifecycle filters", async () => {
+    render(wrap(<NotesWorkspace title="Trash" view="trash" />));
+    await screen.findByText("Research notes");
+    expect(fetchMock.mock.calls.some(([url]) => (url as URL).searchParams.get("view") === "trash")).toBe(true);
+    expect(screen.getByText(/automatic permanent deletion is not enabled/)).toBeInTheDocument();
+  });
+  it("discards previous workspace content immediately while the new request waits", async () => {
+    const { rerender } = render(wrap(<NotesWorkspace />)); await screen.findByText("Research notes");
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    rerender(wrap(<NotesWorkspace />, "org-b"));
+    expect(screen.queryByText("Research notes")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading notes");
+  });
+  it("creates a note through the real command boundary and opens the result", async () => {
+    const user = userEvent.setup(); render(wrap(<NotesWorkspace />));
+    await user.click(screen.getByRole("button", { name: "New note" }));
+    await user.type(screen.getByRole("textbox", { name: "Title" }), "New knowledge");
+    await user.click(screen.getByRole("button", { name: "Create note" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/app/notes/note-a"));
+    const write = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+    expect(JSON.parse(write![1].body)).toEqual({ command: "note.create", input: { title: "New knowledge", body: "" } });
+  });
+  it("surfaces load failures with a retry", async () => {
+    fetchMock.mockImplementation(async () => Response.json({ error: "forbidden", message: "Membership removed" }, { status: 403 }));
+    render(wrap(<NotesWorkspace />));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Membership removed");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+  it("expands and collapses actual nested folders with direct counts", async () => {
     const user = userEvent.setup();
-    render(<NotesWorkspace />);
-    await screen.findByText("No notes yet.");
-    await user.click(screen.getByRole("button", { name: /new note/i }));
-    expect(screen.getByRole("dialog", { name: /new note/i })).toBeInTheDocument();
-    expect(
-      within(screen.getByRole("dialog")).getByLabelText(/^title$/i),
-    ).toBeInTheDocument();
+    render(<FolderTree folders={[{ id: "a", parentId: null, name: "Projects", position: 0, archivedAt: null }, { id: "b", parentId: "a", name: "Research", position: 0, archivedAt: null }]} counts={{ a: 2, b: 3 }} />);
+    expect(screen.getByRole("link", { name: "Research, 3 notes" })).toHaveAttribute("href", "/app/folders/b");
+    await user.click(screen.getByRole("button", { name: "Collapse Projects" }));
+    expect(screen.queryByRole("link", { name: "Research, 3 notes" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Expand Projects" }));
+    expect(screen.getByRole("link", { name: "Research, 3 notes" })).toBeInTheDocument();
   });
-
-  test("empty-state Create note opens the same dialog", async () => {
-    const user = userEvent.setup();
-    render(<NotesWorkspace />);
-    await screen.findByText("No notes yet.");
-    await user.click(screen.getByRole("button", { name: /^create note$/i }));
-    expect(screen.getByRole("dialog", { name: /new note/i })).toBeInTheDocument();
+  it("opens search with Ctrl+K and closes with Escape", async () => {
+    const user = userEvent.setup(); render(wrap(<SearchDialog />));
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(screen.getByRole("dialog", { name: "Search notes" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /Research notes/ })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
-
-  test("validation prevents empty title", async () => {
-    const user = userEvent.setup();
-    render(<NotesWorkspace />);
-    await screen.findByText("No notes yet.");
-    await user.click(screen.getByRole("button", { name: /new note/i }));
-    const dialog = screen.getByRole("dialog", { name: /new note/i });
-    await user.click(
-      within(dialog).getByRole("button", { name: /^create note$/i }),
-    );
-    expect(within(dialog).getByRole("alert")).toHaveTextContent(
-      "Title is required",
-    );
-    expect(mockCreateNote).not.toHaveBeenCalled();
-  });
-
-  test("successful create closes dialog and selects the new note", async () => {
-    const user = userEvent.setup();
-    mockCreateNote.mockResolvedValue(noteCreated);
-    mockFetchNotes
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([noteCreated]);
-
-    render(<NotesWorkspace />);
-    await screen.findByText("No notes yet.");
-    await user.click(screen.getByRole("button", { name: /new note/i }));
-    const dialog = screen.getByRole("dialog", { name: /new note/i });
-    await user.type(within(dialog).getByLabelText(/^title$/i), "Fresh note");
-    await user.type(within(dialog).getByLabelText(/body/i), "Created body");
-    await user.click(
-      within(dialog).getByRole("button", { name: /^create note$/i }),
-    );
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    });
-    expect(await screen.findByDisplayValue("Fresh note")).toBeInTheDocument();
-    expect(screen.getByLabelText("Note content")).toHaveValue("Created body");
-    expect(mockCreateNote).toHaveBeenCalledWith({
-      title: "Fresh note",
-      body: "Created body",
-    });
-  });
-
-  test("API error renders inline and keeps dialog open", async () => {
-    const user = userEvent.setup();
-    mockCreateNote.mockRejectedValue(
-      new NotesApiError("unknown", "Could not create note.", 500),
-    );
-
-    render(<NotesWorkspace />);
-    await screen.findByText("No notes yet.");
-    await user.click(screen.getByRole("button", { name: /new note/i }));
-    const dialog = screen.getByRole("dialog", { name: /new note/i });
-    await user.type(within(dialog).getByLabelText(/^title$/i), "Will fail");
-    await user.click(
-      within(dialog).getByRole("button", { name: /^create note$/i }),
-    );
-
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "Could not create note.",
-    );
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-  });
-
-  test("create button shows pending state", async () => {
-    const user = userEvent.setup();
-    let resolveCreate: ((value: typeof noteCreated) => void) | undefined;
-    mockCreateNote.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveCreate = resolve;
-        }),
-    );
-
-    render(<NotesWorkspace />);
-    await screen.findByText("No notes yet.");
-    await user.click(screen.getByRole("button", { name: /new note/i }));
-    const dialog = screen.getByRole("dialog", { name: /new note/i });
-    await user.type(within(dialog).getByLabelText(/^title$/i), "Pending");
-    await user.click(
-      within(dialog).getByRole("button", { name: /^create note$/i }),
-    );
-
-    expect(
-      await within(dialog).findByRole("button", { name: /creating/i }),
-    ).toBeDisabled();
-
-    mockFetchNotes.mockResolvedValue([noteCreated]);
-    resolveCreate?.(noteCreated);
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    });
-  });
-
-  test("workspace switch during create does not leak previous workspace notes", async () => {
-    const user = userEvent.setup();
-    let resolveCreate: ((value: typeof noteCreated) => void) | undefined;
-    mockCreateNote.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveCreate = resolve;
-        }),
-    );
-
-    const { rerender } = render(<NotesWorkspace />);
-    await screen.findByText("No notes yet.");
-    await user.click(screen.getByRole("button", { name: /new note/i }));
-    const dialog = screen.getByRole("dialog", { name: /new note/i });
-    await user.type(within(dialog).getByLabelText(/^title$/i), "Stale");
-    await user.click(
-      within(dialog).getByRole("button", { name: /^create note$/i }),
-    );
-    expect(
-      await within(dialog).findByRole("button", { name: /creating/i }),
-    ).toBeDisabled();
-
-    mockFetchNotes.mockResolvedValue([noteB]);
-    mockUseActiveOrganization.mockReturnValue({
-      data: { id: "org_b", name: "Workspace B" },
-      isPending: false,
-    });
-    rerender(<NotesWorkspace />);
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(screen.getByLabelText(/loading notes/i)).toBeInTheDocument();
-    });
-
-    resolveCreate?.(noteCreated);
-
-    expect(await screen.findByDisplayValue("Bravo note")).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("Fresh note")).not.toBeInTheDocument();
-    expect(screen.queryByDisplayValue("Stale")).not.toBeInTheDocument();
-  });
-});
-
-describe("NotesWorkspace note editing", () => {
-  beforeEach(() => {
-    mockUseActiveOrganization.mockReturnValue({
-      data: { id: "org_a", name: "Workspace A" },
-      isPending: false,
-    });
-    mockFetchNotes.mockResolvedValue([noteA, noteB]);
-  });
-
-  test("editing marks dirty and Save sends expectedVersion", async () => {
-    const user = userEvent.setup();
-    mockUpdateNote.mockResolvedValue({
-      ...noteA,
-      title: "Alpha edited",
-      body: "Body for alpha edited",
-      version: 2,
-      updatedAt: "2026-09-26T13:00:00.000Z",
-    });
-
-    render(<NotesWorkspace />);
-    await screen.findByDisplayValue("Alpha note");
-    expect(screen.getByText("Saved")).toBeInTheDocument();
-
-    await user.clear(screen.getByLabelText(/^title$/i));
-    await user.type(screen.getByLabelText(/^title$/i), "Alpha edited");
-    await user.clear(screen.getByLabelText("Note content"));
-    await user.type(screen.getByLabelText("Note content"), "Body for alpha edited");
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /save note/i }));
-
-    await waitFor(() => {
-      expect(mockUpdateNote).toHaveBeenCalledWith({
-        id: "note_a",
-        title: "Alpha edited",
-        body: "Body for alpha edited",
-        expectedVersion: 1,
-      });
-    });
-    expect(await screen.findByText("Saved")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Alpha edited")).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: /alpha edited/i }),
-    ).toBeInTheDocument();
-  });
-
-  test("Save is disabled while pending", async () => {
-    const user = userEvent.setup();
-    let resolveUpdate: ((value: typeof noteA) => void) | undefined;
-    mockUpdateNote.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveUpdate = resolve;
-        }),
-    );
-
-    render(<NotesWorkspace />);
-    await screen.findByDisplayValue("Alpha note");
-    await user.type(screen.getByLabelText(/^title$/i), "!");
-    await user.click(screen.getByRole("button", { name: /save note/i }));
-
-    expect(
-      await screen.findByRole("button", { name: /save note/i }),
-    ).toBeDisabled();
-    expect(screen.getByRole("button", { name: /save note/i })).toHaveTextContent(
-      "Saving…",
-    );
-
-    resolveUpdate?.({
-      ...noteA,
-      title: "Alpha note!",
-      version: 2,
-      updatedAt: "2026-09-26T13:00:00.000Z",
-    });
-    await waitFor(() => {
-      expect(screen.getByText("Saved")).toBeInTheDocument();
-    });
-  });
-
-  test("409 shows conflict UI; Reload latest replaces draft", async () => {
-    const user = userEvent.setup();
-    mockUpdateNote.mockRejectedValue(
-      new NotesApiError(
-        "version_conflict",
-        "This note changed somewhere else.",
-        409,
-        3,
-      ),
-    );
-
-    render(<NotesWorkspace />);
-    await screen.findByDisplayValue("Alpha note");
-    await user.type(screen.getByLabelText(/^title$/i), " local");
-    await user.click(screen.getByRole("button", { name: /save note/i }));
-
-    expect(
-      await screen.findByText("This note changed somewhere else."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Conflict")).toBeInTheDocument();
-
-    const serverLatest = {
-      ...noteA,
-      title: "Server wins",
-      body: "Server body",
-      version: 3,
-      updatedAt: "2026-09-26T14:00:00.000Z",
-    };
-    mockFetchNotes.mockResolvedValue([serverLatest, noteB]);
-    await user.click(screen.getByRole("button", { name: /reload latest/i }));
-
-    expect(await screen.findByDisplayValue("Server wins")).toBeInTheDocument();
-    expect(screen.getByLabelText("Note content")).toHaveValue("Server body");
-    expect(screen.getByText("Saved")).toBeInTheDocument();
-  });
-
-  test("Keep my draft preserves local text", async () => {
-    const user = userEvent.setup();
-    mockUpdateNote.mockRejectedValue(
-      new NotesApiError(
-        "version_conflict",
-        "This note changed somewhere else.",
-        409,
-        3,
-      ),
-    );
-
-    render(<NotesWorkspace />);
-    await screen.findByDisplayValue("Alpha note");
-    await user.clear(screen.getByLabelText(/^title$/i));
-    await user.type(screen.getByLabelText(/^title$/i), "My draft title");
-    await user.click(screen.getByRole("button", { name: /save note/i }));
-
-    expect(
-      await screen.findByText("This note changed somewhere else."),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /keep my draft/i }));
-    expect(screen.getByDisplayValue("My draft title")).toBeInTheDocument();
-    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
-    expect(mockFetchNotes).toHaveBeenCalledTimes(1);
+  it("shows real tag counts and persists instructions", async () => {
+    const user = userEvent.setup(); render(wrap(<><TagsPage /><InstructionsEditor /></>));
+    expect(await screen.findByRole("link", { name: /Research.*1 notes/ })).toHaveAttribute("href", "/app/tags/tag-a");
+    const editor = await screen.findByRole("textbox", { name: "Instructions" });
+    expect(editor).toHaveValue("Be precise");
+    await user.type(editor, ". Cite sources.");
+    await user.click(screen.getByRole("button", { name: "Save instructions" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved"));
+    expect(fetchMock.mock.calls.some(([, init]) => init?.body?.includes('"command":"instructions.set"'))).toBe(true);
   });
 });

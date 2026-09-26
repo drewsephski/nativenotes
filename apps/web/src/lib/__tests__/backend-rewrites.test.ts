@@ -16,6 +16,10 @@ describe("backend rewrites", () => {
         destination: "https://nativenotes.vercel.app/api/auth/:path*",
       },
       {
+        source: "/api/workspace/:path*",
+        destination: "https://nativenotes.vercel.app/api/workspace/:path*",
+      },
+      {
         source: "/api/notes",
         destination: "https://nativenotes.vercel.app/api/notes",
       },

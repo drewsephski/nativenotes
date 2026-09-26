@@ -1,5 +1,7 @@
 "use client";
 
+import { ProductProvider } from "./product-context";
+import { SearchDialog } from "./search-dialog";
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { AuthGate } from "@/components/app-shell/auth-gate";
@@ -24,7 +26,7 @@ function AuthenticatedShell({ children }: AppShellProps) {
     error: orgsError,
     refetch: refetchOrgs,
   } = useListOrganizations();
-  const { refetch: refetchActive } = useActiveOrganization();
+  const { refetch: refetchActive, data: activeOrganization, isPending: activePending } = useActiveOrganization();
 
   const orgCount = organizations?.length ?? 0;
   const showOnboarding = !orgsPending && !orgsError && orgCount === 0;
@@ -70,8 +72,11 @@ function AuthenticatedShell({ children }: AppShellProps) {
   }
 
   return (
+    <ProductProvider key={activePending ? "loading" : activeOrganization?.id ?? "none"} workspaceId={activePending ? "" : activeOrganization?.id ?? ""}>
     <TooltipProvider delayDuration={200}>
+      <SearchDialog />
       <div className="flex h-dvh min-h-0 overflow-hidden bg-background">
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-11 items-center gap-2 border-b border-border px-3 md:hidden">
             <span className="min-w-0 flex-1 text-[13px] font-semibold tracking-tight">
@@ -91,9 +96,9 @@ function AuthenticatedShell({ children }: AppShellProps) {
           </div>
           <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
         </div>
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       </div>
     </TooltipProvider>
+    </ProductProvider>
   );
 }
 

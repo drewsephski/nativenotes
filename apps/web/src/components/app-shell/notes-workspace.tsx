@@ -1,333 +1,36 @@
 "use client";
-
-import { useEffect, useRef, useState } from "react";
-import { Plus, Search } from "lucide-react";
-import { CreateNoteDialog } from "@/components/app-shell/create-note-dialog";
-import { NoteEditor } from "@/components/app-shell/note-editor";
-import { NotesList } from "@/components/app-shell/notes-list";
+import Link from "next/link";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useActiveOrganization } from "@/lib/auth-client";
-import {
-  fetchNotes,
-  toNoteListItem,
-  type Note,
-  type NoteListItem,
-  NotesApiError,
-} from "@/lib/notes-api";
-import { cn } from "@/lib/utils";
-
-type LoadState =
-  | { status: "loading" }
-  | { status: "success"; notes: NoteListItem[] }
-  | { status: "error"; message: string };
-
-interface NotesWorkspaceProps {
-  title?: string;
-}
-
-/**
- * Remounts the loader when the active workspace changes so previous-tenant
- * notes never flash into the new workspace.
- */
-export function NotesWorkspace({ title = "All Notes" }: NotesWorkspaceProps) {
-  const { data: activeOrganization, isPending: activePending } =
-    useActiveOrganization();
-  const workspaceId = activeOrganization?.id ?? null;
-
-  if (activePending) {
-    return <NotesWorkspaceFrame title={title} loadState={{ status: "loading" }} />;
-  }
-
-  if (!workspaceId) {
-    return (
-      <NotesWorkspaceFrame
-        title={title}
-        loadState={{
-          status: "error",
-          message: "Select a workspace to view notes.",
-        }}
-      />
-    );
-  }
-
-  return (
-    <NotesWorkspaceLoader
-      key={workspaceId}
-      title={title}
-      workspaceId={workspaceId}
-    />
-  );
-}
-
-function NotesWorkspaceLoader({
-  title,
-  workspaceId,
-}: {
-  title: string;
-  workspaceId: string;
-}) {
-  const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mobileShowEditor, setMobileShowEditor] = useState(false);
-  const [retryToken, setRetryToken] = useState(0);
-  const [createOpen, setCreateOpen] = useState(false);
-  const aliveRef = useRef(true);
-
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void fetchNotes()
-      .then((notes) => {
-        if (cancelled) return;
-        const items = notes.map(toNoteListItem);
-        setLoadState({ status: "success", notes: items });
-        setSelectedId((current) => {
-          if (current && items.some((note) => note.id === current)) {
-            return current;
-          }
-          return items[0]?.id ?? null;
-        });
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        const message =
-          error instanceof NotesApiError
-            ? error.message
-            : "Could not load notes.";
-        setLoadState({ status: "error", message });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceId, retryToken]);
-
-  async function handleNoteCreated(created: Note) {
-    // Prefer correctness: refetch active-tenant notes, then select the new ID.
-    // Workspace remount (key=workspaceId) discards this loader if the user
-    // switched tenants while the create request was in flight.
-    const notes = await fetchNotes();
-    if (!aliveRef.current) return;
-    const items = notes.map(toNoteListItem);
-    setLoadState({ status: "success", notes: items });
-    setSelectedId(created.id);
-    setMobileShowEditor(true);
-  }
-
-  function handleNoteSaved(saved: Note) {
-    if (!aliveRef.current) return;
-    setLoadState((current) => {
-      if (current.status !== "success") return current;
-      const item = toNoteListItem(saved);
-      return {
-        status: "success",
-        notes: current.notes.map((note) =>
-          note.id === saved.id ? item : note,
-        ),
-      };
-    });
-  }
-
-  async function handleReloadLatest(
-    noteId: string,
-  ): Promise<NoteListItem | null> {
-    const notes = await fetchNotes();
-    if (!aliveRef.current) return null;
-    const items = notes.map(toNoteListItem);
-    setLoadState({ status: "success", notes: items });
-    return items.find((note) => note.id === noteId) ?? null;
-  }
-
-  return (
-    <>
-      <NotesWorkspaceFrame
-        title={title}
-        loadState={loadState}
-        selectedId={selectedId}
-        onSelect={(note) => {
-          // Unsaved drafts are discarded when switching notes (no confirm).
-          setSelectedId(note.id);
-          setMobileShowEditor(true);
-        }}
-        mobileShowEditor={mobileShowEditor}
-        onBack={() => setMobileShowEditor(false)}
-        onRetry={() => {
-          setSelectedId(null);
-          setLoadState({ status: "loading" });
-          setRetryToken((value) => value + 1);
-        }}
-        onCreateNote={() => setCreateOpen(true)}
-        onNoteSaved={handleNoteSaved}
-        onReloadLatest={handleReloadLatest}
-      />
-      <CreateNoteDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={handleNoteCreated}
-      />
-    </>
-  );
-}
-
-function NotesWorkspaceFrame({
-  title,
-  loadState,
-  selectedId = null,
-  onSelect,
-  mobileShowEditor = false,
-  onBack,
-  onRetry,
-  onCreateNote,
-  onNoteSaved,
-  onReloadLatest,
-}: {
-  title: string;
-  loadState: LoadState;
-  selectedId?: string | null;
-  onSelect?: (note: NoteListItem) => void;
-  mobileShowEditor?: boolean;
-  onBack?: () => void;
-  onRetry?: () => void;
-  onCreateNote?: () => void;
-  onNoteSaved?: (note: Note) => void;
-  onReloadLatest?: (noteId: string) => Promise<NoteListItem | null>;
-}) {
-  const notes =
-    loadState.status === "success" ? loadState.notes : ([] as NoteListItem[]);
-  const selected = notes.find((note) => note.id === selectedId) ?? null;
-  const isLoading = loadState.status === "loading";
-  const isError = loadState.status === "error";
-
-  return (
-    <div className="flex h-full min-h-0">
-      <section
-        className={cn(
-          "flex w-full min-w-0 flex-col border-r border-border bg-background md:w-[340px] md:shrink-0 lg:w-[360px]",
-          mobileShowEditor ? "hidden md:flex" : "flex",
-        )}
-      >
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2">
-              <h1 className="truncate text-[13px] font-semibold text-foreground">
-                {title}
-              </h1>
-              {!isLoading && !isError ? (
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  {notes.length}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            aria-label="New note"
-            disabled={!onCreateNote || isLoading || isError}
-            onClick={onCreateNote}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            New note
-          </Button>
-        </div>
-        <div className="border-b border-border p-2">
-          <label className="sr-only" htmlFor="notes-search">
-            Search notes
-          </label>
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              id="notes-search"
-              placeholder="Search notes…"
-              className="pl-8"
-              readOnly
-              disabled
-              aria-describedby="notes-search-hint"
-            />
-          </div>
-          <p id="notes-search-hint" className="sr-only">
-            Search is not available yet.
-          </p>
-        </div>
-
-        {isLoading ? (
-          <NotesListSkeleton />
-        ) : isError ? (
-          <div className="flex flex-1 flex-col items-start justify-center gap-2 px-4 py-8">
-            <p className="text-[13px] text-muted-foreground">
-              {loadState.message}
-            </p>
-            {onRetry ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onRetry}
-                aria-label="Retry loading notes"
-              >
-                Retry
-              </Button>
-            ) : null}
-          </div>
-        ) : (
-          <NotesList
-            notes={notes}
-            selectedId={selectedId}
-            onSelect={onSelect ?? (() => undefined)}
-            emptyTitle="No notes yet."
-            emptyDescription="Your notes will appear here."
-            onCreateNote={onCreateNote}
-            className="min-h-0 flex-1"
-          />
-        )}
-      </section>
-
-      <section
-        className={cn(
-          "min-w-0 flex-1",
-          mobileShowEditor ? "flex" : "hidden md:flex",
-        )}
-      >
-        <NoteEditor
-          note={isLoading || isError ? null : selected}
-          onBack={onBack}
-          onNoteSaved={onNoteSaved}
-          onReloadLatest={onReloadLatest}
-          className="w-full"
-        />
-      </section>
-    </div>
-  );
-}
-
-function NotesListSkeleton() {
-  return (
-    <div
-      className="min-h-0 flex-1 space-y-0 divide-y divide-border overflow-hidden"
-      aria-busy="true"
-      aria-label="Loading notes"
-    >
-      {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="space-y-2 px-3 py-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="h-3 w-2/5 animate-pulse rounded bg-muted" />
-            <div className="h-2.5 w-10 animate-pulse rounded bg-muted" />
-          </div>
-          <div className="h-2.5 w-4/5 animate-pulse rounded bg-muted" />
-          <div className="h-2.5 w-3/5 animate-pulse rounded bg-muted" />
-        </div>
-      ))}
-    </div>
-  );
+import { Dialog } from "@/components/ui/dialog";
+import { formatRelativeTime } from "@/lib/date";
+import type { NoteResults } from "@/lib/product-api";
+import { useNavigation, useProduct, useResource } from "./product-context";
+import { CreateProductNote } from "./create-product-note";
+import { FolderForm } from "./folder-settings";
+import { InstructionsEditor } from "./instructions-editor";
+export function NotesWorkspace({ title = "All Notes", view = "all", folderId, tagId }: { title?: string; view?: string; folderId?: string; tagId?: string }) {
+  const { workspaceId, refresh } = useProduct(); const nav = useNavigation();
+  const [search, setSearch] = useState(""); const [offset, setOffset] = useState(0);
+  const [create, setCreate] = useState(false); const [settings, setSettings] = useState(false);
+  const params = new URLSearchParams({ view, offset: String(offset) });
+  if (folderId) params.set("folderId", folderId); if (tagId) params.set("tagId", tagId);
+  if (search) params.set("query", search);
+  const { data, error } = useResource<NoteResults>(`notes?${params}`);
+  const folder = nav.data?.folders.find(f => f.id === folderId);
+  return <div className="page-scroll">
+    <div className="page-heading"><div><p className="eyebrow">Your knowledge{folder?.archivedAt ? " · Archived folder" : ""}</p><h1>{folder?.name ?? title}</h1></div><div className="flex gap-2">{folder && <Button variant="ghost" onClick={() => setSettings(true)}>Folder settings</Button>}<Button disabled={!workspaceId} onClick={() => setCreate(true)}>New note</Button></div></div>
+    {view === "trash" && <p className="mb-5 text-sm text-muted-foreground">Notes remain recoverable. The 30-day retention date is recorded; automatic permanent deletion is not enabled.</p>}
+    {!workspaceId ? <p>Select a workspace to view notes.</p> : <>
+      <Input aria-label="Filter notes" value={search} onChange={e => { setSearch(e.target.value); setOffset(0); }} placeholder="Filter this collection…" className="mb-6 max-w-sm" />
+      {error && <div role="alert"><p>{error}</p><Button variant="outline" onClick={refresh}>Retry</Button></div>}
+      {!data && !error && <p className="text-muted-foreground" role="status">Loading notes…</p>}
+      {data?.notes.length === 0 && <div className="py-16"><h2 className="text-lg font-medium">No notes here</h2><p className="mt-2 text-muted-foreground">{search ? "Try a different search." : "Your notes will appear here as you organize your workspace."}</p></div>}
+      <ul className="divide-y divide-border">{data?.notes.map(note => <li key={note.id}><Link className="group block rounded px-2 py-5 hover:bg-muted/50" href={`/app/notes/${note.id}`}><div className="flex items-baseline justify-between gap-3"><h2 className="text-[17px] font-medium tracking-tight">{note.title}{note.favorited && <span className="ml-2 text-xs text-[#a66b36]" aria-label="Favorite">★</span>}</h2><time className="shrink-0 text-[11px] text-muted-foreground" dateTime={note.updatedAt}>{formatRelativeTime(note.updatedAt)}</time></div><p className="mt-2 line-clamp-2 max-w-3xl text-[13px] leading-6 text-muted-foreground">{note.summary || note.body.replace(/[#*`]/g, "").slice(0, 220) || "No content yet"}</p><p className="mt-3 text-[11px] text-muted-foreground">{nav.data?.folders.find(f => f.id === note.folderId)?.name ?? "Inbox"}{note.freshness === "needs_review" ? " · Needs review" : ""}</p></Link></li>)}</ul>
+      {(offset > 0 || data?.hasMore) && <div className="mt-5 flex gap-3"><Button variant="outline" disabled={!offset} onClick={() => setOffset(v => Math.max(0, v - 100))}>Previous</Button><Button variant="outline" disabled={!data?.hasMore} onClick={() => setOffset(v => v + 100)}>Next</Button></div>}
+    </>}
+    {create && <CreateProductNote onClose={() => setCreate(false)} />}
+    {settings && folder && <Dialog title="Folder settings" onClose={() => setSettings(false)}><FolderForm folder={folder} onSaved={() => setSettings(false)} /><div className="mt-8 border-t border-border pt-6"><InstructionsEditor folderId={folder.id} /></div></Dialog>}
+  </div>;
 }
