@@ -43,5 +43,5 @@ test("Next config rejects its own deployment URL and preserves the explicit map"
     message: expect.stringMatching(/rewrite loop/),
   });
   vi.stubEnv("NATIVE_NOTES_BACKEND_ORIGIN", "https://nativenotes.vercel.app");
-  expect(await nextConfig.rewrites!()).toHaveLength(10);
+  expect(await nextConfig.rewrites!()).toHaveLength(11);
 });

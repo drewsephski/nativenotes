@@ -20,6 +20,7 @@ const {
   HARNESS_CLIENT_ID,
   authorizeForOrganization,
   callNoteList,
+  callMcpTool,
   createCookieJar,
   cookieHeader,
   decodeAccessToken,
@@ -695,5 +696,113 @@ describe("OAuth organization-bound lifecycle", () => {
       anonymousRejected: anonymous.status,
       foreignOrgConsent: rejected.status,
     };
+  }, 60_000);
+  it("MCP writes require scopes, preserve grant tenant and reject stale versions and removed members", async () => {
+    const readonly = await callMcpTool(
+      TEST_BASE,
+      grantA.accessToken,
+      "note.create",
+      { title: "Denied", body: "" },
+    );
+    expect(JSON.stringify(readonly.body)).toMatch(
+      /error|not found|not available/i,
+    );
+    const authorized = await authorizeForOrganization({
+      baseUrl: TEST_BASE,
+      jar,
+      organizationId: orgA,
+      resource: env.MCP_RESOURCE_URL,
+      scopes: "openid offline_access mcp:read mcp:write mcp:instructions",
+    });
+    const token = await exchangeAuthorizationCode({
+      baseUrl: TEST_BASE,
+      code: authorized.code,
+      verifier: authorized.verifier,
+      resource: env.MCP_RESOURCE_URL,
+    });
+    await fetchWithCookies(
+      jar,
+      `${TEST_BASE}/api/auth/organization/set-active`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ organizationId: orgB }),
+      },
+    );
+    function output(result: { body: unknown }) {
+      const envelope = result.body as {
+        result?: { isError?: boolean; content?: { text: string }[] };
+      };
+      expect(envelope.result?.isError).not.toBe(true);
+      return JSON.parse(envelope.result!.content![0]!.text) as {
+        id: string;
+        version: number;
+      };
+    }
+    const created = output(
+      await callMcpTool(TEST_BASE, token.access_token, "note.create", {
+        title: "MCP scoped write",
+        body: "v1",
+        tenantId: orgB,
+      }),
+    );
+    try {
+      const stored = await db
+        .select()
+        .from(notes)
+        .where(eq(notes.id, created.id));
+      expect(stored[0]?.tenantId).toBe(orgA);
+      const updated = output(
+        await callMcpTool(TEST_BASE, token.access_token, "note.update", {
+          id: created.id,
+          title: "MCP scoped write",
+          body: "v2",
+          expectedVersion: 1,
+        }),
+      );
+      expect(updated.version).toBe(2);
+      const stale = await callMcpTool(
+        TEST_BASE,
+        token.access_token,
+        "note.update",
+        { id: created.id, title: "bad", body: "bad", expectedVersion: 1 },
+      );
+      expect(JSON.stringify(stale.body)).toContain("version_conflict");
+      const foreign = await callMcpTool(
+        TEST_BASE,
+        token.access_token,
+        "note.favorite",
+        { id: noteB, favorited: true, tenantId: orgB },
+      );
+      expect(JSON.stringify(foreign.body)).toContain("not_found");
+      await db
+        .delete(member)
+        .where(and(eq(member.userId, userId), eq(member.organizationId, orgA)));
+      const removed = await callMcpTool(
+        TEST_BASE,
+        token.access_token,
+        "note.favorite",
+        { id: created.id, favorited: true },
+      );
+      expect(removed.status).toBe(403);
+    } finally {
+      await db
+        .delete(notes)
+        .where(and(eq(notes.tenantId, orgA), eq(notes.id, created.id)));
+      const membership = await db
+        .select()
+        .from(member)
+        .where(and(eq(member.userId, userId), eq(member.organizationId, orgA)));
+      if (!membership.length)
+        await db
+          .insert(member)
+          .values({
+            id: randomUUID(),
+            organizationId: orgA,
+            userId,
+            role: "owner",
+            createdAt: new Date(),
+          });
+    }
   }, 60_000);
 });

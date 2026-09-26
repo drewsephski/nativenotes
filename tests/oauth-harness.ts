@@ -12,8 +12,7 @@ import {
 export type CookieJar = Map<string, string>;
 
 export const HARNESS_CLIENT_ID = "nativenotes-oauth-harness";
-export const HARNESS_REDIRECT_URI =
-  "http://127.0.0.1/oauth/harness/callback";
+export const HARNESS_REDIRECT_URI = "http://127.0.0.1/oauth/harness/callback";
 
 export function createCookieJar(): CookieJar {
   return new Map();
@@ -93,7 +92,10 @@ export async function followRedirects(
     if (response.status >= 200 && response.status < 300) {
       const contentType = response.headers.get("content-type") ?? "";
       if (contentType.includes("application/json")) {
-        const body = (await response.clone().json().catch(() => null)) as {
+        const body = (await response
+          .clone()
+          .json()
+          .catch(() => null)) as {
           redirect?: boolean;
           url?: string;
           redirect_uri?: string;
@@ -187,9 +189,10 @@ export async function refreshAccessToken(input: {
   };
 }
 
-export async function callNoteList(
+export async function callMcpTool(
   baseUrl: string,
   accessToken: string,
+  name: string,
   args: Record<string, unknown> = {},
 ): Promise<{ status: number; body: unknown }> {
   const meta = {
@@ -230,14 +233,14 @@ export async function callNoteList(
       "content-type": "application/json",
       "MCP-Protocol-Version": "2026-07-28",
       "Mcp-Method": "tools/call",
-      "Mcp-Name": "note.list",
+      "Mcp-Name": name,
     },
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: 2,
       method: "tools/call",
       params: {
-        name: "note.list",
+        name,
         arguments: args,
         _meta: meta,
       },
@@ -248,6 +251,14 @@ export async function callNoteList(
     status: listed.status,
     body: await listed.json().catch(() => null),
   };
+}
+
+export function callNoteList(
+  baseUrl: string,
+  accessToken: string,
+  args: Record<string, unknown> = {},
+) {
+  return callMcpTool(baseUrl, accessToken, "note.list", args);
 }
 
 export function noteIdsFromMcpBody(body: unknown): string[] {
@@ -272,6 +283,7 @@ export async function authorizeForOrganization(input: {
   jar: CookieJar;
   organizationId: string;
   resource: string;
+  scopes?: string;
 }): Promise<{ code: string; verifier: string; state: string }> {
   const { verifier, challenge } = createPkcePair();
   const state = randomBytes(16).toString("hex");
@@ -279,7 +291,10 @@ export async function authorizeForOrganization(input: {
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("client_id", HARNESS_CLIENT_ID);
   authorize.searchParams.set("redirect_uri", HARNESS_REDIRECT_URI);
-  authorize.searchParams.set("scope", "openid offline_access mcp:read");
+  authorize.searchParams.set(
+    "scope",
+    input.scopes ?? "openid offline_access mcp:read",
+  );
   authorize.searchParams.set("code_challenge", challenge);
   authorize.searchParams.set("code_challenge_method", "S256");
   authorize.searchParams.set("state", state);
@@ -309,7 +324,10 @@ export async function authorizeForOrganization(input: {
   if (!redirectTarget) {
     const contentType = consent.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
-      const body = (await consent.clone().json().catch(() => null)) as {
+      const body = (await consent
+        .clone()
+        .json()
+        .catch(() => null)) as {
         redirect_uri?: string;
         url?: string;
         redirect?: boolean;

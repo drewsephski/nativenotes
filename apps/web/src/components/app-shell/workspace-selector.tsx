@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { CreateWorkspaceDialog } from "@/components/app-shell/create-workspace-dialog";
 import {
   DropdownMenu,
@@ -106,14 +107,14 @@ export function WorkspaceSelector({ className }: WorkspaceSelectorProps) {
       <div className="space-y-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
+            <Button
               type="button"
+              variant="ghost"
               aria-label={`Workspace: ${displayName}`}
               disabled={switchingId !== null}
               className={cn(
-                "flex h-8 w-full items-center gap-2 rounded-md border border-transparent px-2 text-left text-[13px]",
-                "hover:border-border hover:bg-accent",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "h-8 w-full justify-start rounded-md border border-transparent px-2 text-left text-[13px]",
+                "hover:border-border",
                 "disabled:opacity-60",
                 className,
               )}
@@ -128,9 +129,15 @@ export function WorkspaceSelector({ className }: WorkspaceSelectorProps) {
                 className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                 aria-hidden="true"
               />
-            </button>
+            </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[220px]">
+          <DropdownMenuContent
+            align="start"
+            className="w-[220px]"
+            onCloseAutoFocus={(event) => {
+              if (createOpen) event.preventDefault();
+            }}
+          >
             <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
             {list.map((organization) => {
               const isActive = organization.id === active?.id;
@@ -152,12 +159,7 @@ export function WorkspaceSelector({ className }: WorkspaceSelectorProps) {
               );
             })}
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={(event) => {
-                event.preventDefault();
-                setCreateOpen(true);
-              }}
-            >
+            <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               Create workspace
             </DropdownMenuItem>

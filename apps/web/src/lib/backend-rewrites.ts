@@ -10,6 +10,7 @@ export type BackendRewrite = {
 
 const BACKEND_REWRITE_SOURCES = [
   "/api/auth/:path*",
+  "/api/workspace/:path*",
   "/api/notes",
   "/api/notes/:path*",
   "/.well-known/:path*",

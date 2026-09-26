@@ -1,16 +1,17 @@
 "use client";
 
+import { ProductProvider } from "./product-context";
+import { SearchDialog } from "./search-dialog";
 import { useState } from "react";
 import { Menu } from "lucide-react";
+import Link from "next/link";
+import { BrandLogo } from "@/components/brand-logo";
 import { AuthGate } from "@/components/app-shell/auth-gate";
 import { Sidebar } from "@/components/app-shell/sidebar";
 import { WorkspaceOnboarding } from "@/components/app-shell/workspace-onboarding";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  useListOrganizations,
-  useActiveOrganization,
-} from "@/lib/auth-client";
+import { useListOrganizations, useActiveOrganization } from "@/lib/auth-client";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -24,7 +25,11 @@ function AuthenticatedShell({ children }: AppShellProps) {
     error: orgsError,
     refetch: refetchOrgs,
   } = useListOrganizations();
-  const { refetch: refetchActive } = useActiveOrganization();
+  const {
+    refetch: refetchActive,
+    data: activeOrganization,
+    isPending: activePending,
+  } = useActiveOrganization();
 
   const orgCount = organizations?.length ?? 0;
   const showOnboarding = !orgsPending && !orgsError && orgCount === 0;
@@ -70,30 +75,36 @@ function AuthenticatedShell({ children }: AppShellProps) {
   }
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <div className="flex h-dvh min-h-0 overflow-hidden bg-background">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-11 items-center gap-2 border-b border-border px-3 md:hidden">
-            <span className="min-w-0 flex-1 text-[13px] font-semibold tracking-tight">
-              NativeNotes
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Open sidebar"
-              aria-controls="app-sidebar"
-              aria-expanded={sidebarOpen}
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu className="h-4 w-4" aria-hidden="true" />
-            </Button>
+    <ProductProvider
+      key={activePending ? "loading" : (activeOrganization?.id ?? "none")}
+      workspaceId={activePending ? "" : (activeOrganization?.id ?? "")}
+    >
+      <TooltipProvider delayDuration={200}>
+        <SearchDialog />
+        <div className="flex h-dvh min-h-0 overflow-hidden bg-background">
+          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex h-11 items-center gap-2 border-b border-border px-3 xl:hidden">
+              <Link href="/app" className="mr-auto inline-flex rounded-sm">
+                <BrandLogo compact />
+              </Link>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Open sidebar"
+                aria-controls="app-sidebar"
+                aria-expanded={sidebarOpen}
+                onClick={() => setSidebarOpen(true)}
+              >
+                <Menu className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
+            <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
           </div>
-          <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
         </div>
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      </div>
-    </TooltipProvider>
+      </TooltipProvider>
+    </ProductProvider>
   );
 }
 

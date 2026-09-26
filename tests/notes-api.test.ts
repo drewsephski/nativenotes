@@ -1,3 +1,14 @@
+const noteDefaults = {
+  folderId: null,
+  summary: null,
+  favorited: false,
+  freshness: "current" as const,
+  verifiedAt: null,
+  archivedAt: null,
+  trashedAt: null,
+  purgeAfter: null,
+  createdByUserId: null,
+};
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -36,17 +47,12 @@ vi.mock("better-auth/node", () => ({
 }));
 
 const { handleNotesRoute } = await import("../src/server/notes-route.js");
-const {
-  createNoteForTenant,
-  updateNoteForTenant,
-} = await import("../src/services/note-service.js");
-const { isTrustedMutationOrigin } = await import(
-  "../src/server/request-origin.js"
-);
-const {
-  NoteNotFoundError,
-  NoteVersionConflictError,
-} = await import("../src/domain/errors.js");
+const { createNoteForTenant, updateNoteForTenant } =
+  await import("../src/services/note-service.js");
+const { isTrustedMutationOrigin } =
+  await import("../src/server/request-origin.js");
+const { NoteNotFoundError, NoteVersionConflictError } =
+  await import("../src/domain/errors.js");
 
 function fakeGetRequest(url = "/api/notes"): IncomingMessage {
   return {
@@ -142,6 +148,7 @@ describe("createNoteForTenant", () => {
           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
         );
         return {
+          ...noteDefaults,
           id: input.id,
           tenantId: input.tenantId,
           title: input.title,
@@ -199,6 +206,7 @@ describe("updateNoteForTenant", () => {
           body: "New body",
         });
         return {
+          ...noteDefaults,
           id: "note-1",
           tenantId: "org-a",
           title: "Updated",
@@ -277,6 +285,7 @@ describe("updateNoteForTenant", () => {
       },
       async findByTenantAndId() {
         return {
+          ...noteDefaults,
           id: "note-1",
           tenantId: "org-a",
           title: "Server",
@@ -751,6 +760,7 @@ describe("handleNotesRoute", () => {
       updatedAt: "2026-01-04T00:00:00.000Z",
     });
     expect(mockUpdate).toHaveBeenCalledWith({
+      authorUserId: "user-a",
       tenantId: "org-a",
       noteId: "note-a",
       expectedVersion: 1,

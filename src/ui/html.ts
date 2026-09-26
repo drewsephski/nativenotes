@@ -1,6 +1,11 @@
 import type { ServerResponse } from "node:http";
 
 import { AUTH_STYLES } from "./styles.js";
+import { BRAND_MARK_DATA_URI } from "./brand-image.js";
+
+export function brandHtml(): string {
+  return `<span class="nn-logo"><img src="${BRAND_MARK_DATA_URI}" width="28" height="28" alt="" aria-hidden="true"><span>NativeNotes</span></span>`;
+}
 
 export function escapeHtml(value: string): string {
   return value.replace(
@@ -38,11 +43,13 @@ export function renderDocument(input: {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(input.title)}</title>
+<link rel="icon" type="image/png" href="${BRAND_MARK_DATA_URI}">
 ${description}
 <style>${AUTH_STYLES}</style>
 </head>
 <body>
 ${input.body}
+<footer class="nn-brand-footer">${brandHtml()}</footer>
 </body>
 </html>`;
 }

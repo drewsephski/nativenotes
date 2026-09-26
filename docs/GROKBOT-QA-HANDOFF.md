@@ -1,4 +1,4 @@
-# Grokbot computer-use QA handoff — NativeNotes Google OAuth / ChatGPT
+# Grokbot computer-use QA handoff — NativeNotes product parity
 
 Production origin: `https://nativenotes.app`
 
@@ -8,7 +8,7 @@ Source checklist: [`docs/QA.md`](./QA.md)
 
 ## Mission
 
-Use computer-use to exercise NativeNotes auth and ChatGPT OAuth continuation in production (and locally if needed). Prefer stable `data-testid` anchors from `docs/QA.md`. Do not rely on CSS class names.
+Use computer-use to exercise the NativeNotes product parity workflows, auth, and ChatGPT OAuth continuation in production (and locally if needed). Use accessible roles/names for product controls and stable `data-testid` anchors from `docs/QA.md` for auth. Do not rely on CSS class names.
 
 ## Hard constraints (do not break)
 
@@ -23,7 +23,9 @@ When fixing reproducible UI/auth bugs:
    - `pnpm typecheck`
    - `pnpm test`
    - `pnpm build`
-6. Do **not** implement folders, tags, search, revisions, or additional MCP tools.
+6. Exercise the implemented folders, tags, search, history, instructions, freshness, graph and MCP tools. Fix reproducible bugs in these features while preserving architecture and tenant safety. Never add fake controls or relax a release gate.
+7. After product fixes also run web lint, typecheck, test and build. Use the package manager and existing conventions.
+8. Preserve user content; use clearly labeled QA items. Sharing is intentionally absent. Do not add public access or permanent deletion.
 
 ## Stable anchors
 
@@ -88,7 +90,7 @@ Critical fail: consent missing ChatGPT context, or ChatGPT never receives an aut
 
 ### UI quality
 
-1. Desktop ≥1200px — centered sparse monochrome cards; visible focus rings.
+1. Desktop ≥1280px — warm light product UI, left sidebar, document column and right inspector; visible focus rings. Auth screens keep their centered layout.
 2. Mobile 375px — single column; Approve/Deny stack; no horizontal scroll.
 3. Keyboard — Tab through Google/email/password/submit; consent select/Approve/Deny; Enter activates.
 4. Focus-visible outlines on every interactive control.
@@ -110,10 +112,21 @@ For each scenario:
 - Fix reproducible UI/auth bugs found during QA.
 - Prefer minimal diffs that restore expected behavior.
 - Never weaken CSRF/origin checks; if server-side auth forwards are needed, forward a trusted `Origin` (or Referer origin) to Better Auth.
-- Do not add product features beyond auth/consent bugfixes.
+- Fix reproducible defects in the implemented product and auth flows; defer unrequested new features.
 
 ## Suggested first probe
 
 1. `GET https://nativenotes.app/sign-in` — polished UI, Google primary, email fallback.
 2. Click `[data-testid="google-sign-in"]` — must reach `accounts.google.com` (not “Missing or null Origin”).
 3. Stop before completing Google login if interactive account selection requires the human operator; hand off remaining ChatGPT steps to the operator when needed.
+
+
+## Product parity mission
+
+Run every scenario in the **Product parity release** table in [QA.md](./QA.md), including desktop/mobile/keyboard and workspace isolation. Use Dia computer-use. The product has real folder settings, tag management, metadata, revision history, instruction inheritance and read/write MCP scopes. The web active workspace must never retarget an MCP grant.
+
+Use [PRODUCT-MODEL.md](./PRODUCT-MODEL.md) for intended semantics: direct folder counts; archive folder only; Trash preserves prior archive state; metadata does not increment content version; restore creates a new revision; ambiguous wiki titles do not resolve.
+
+You may fix reproducible defects, add focused regression coverage, and rerun validation. Do not rewrite auth, change framework/deployment architecture, bypass optimistic locking, weaken composite tenant foreign keys, make migrations destructive, add embeddings, or implement background purge. Keep new work in logical commits.
+
+Report each scenario as Passed / Failed / Not exercised, with deployment, browser/viewport, reproduction, observed result, fix and verification. Distinguish automated isolated OAuth write proof from real ChatGPT interaction; do not claim the latter from a tool listing alone. A real client permission expansion requires the user's action/approval. The existing working ChatGPT grant must remain usable.

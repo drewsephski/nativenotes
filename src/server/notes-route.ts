@@ -173,6 +173,7 @@ async function handleCreateNote(
     // Client-supplied tenantId (if present) is never used.
     const note = await createNoteForTenant({
       tenantId: activeOrganizationId,
+      authorUserId: session.user.id,
       title,
       body: parsed.data.body,
     });
@@ -251,6 +252,7 @@ async function handleUpdateNote(
     // Client-supplied tenantId (if present) is never used.
     const note = await updateNoteForTenant({
       tenantId: activeOrganizationId,
+      authorUserId: session.user.id,
       noteId,
       expectedVersion: parsed.data.expectedVersion,
       title,

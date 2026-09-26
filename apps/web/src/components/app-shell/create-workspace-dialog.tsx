@@ -1,11 +1,11 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import { slugifyWorkspaceName } from "@/lib/workspace";
-import { cn } from "@/lib/utils";
+import { Dialog } from "@/components/ui/dialog";
 
 interface CreateWorkspaceDialogProps {
   open: boolean;
@@ -22,7 +22,6 @@ export function CreateWorkspaceDialog({
   onCreated,
   className,
 }: CreateWorkspaceDialogProps) {
-  const titleId = useId();
   const [name, setName] = useState(defaultName);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,66 +87,53 @@ export function CreateWorkspaceDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
-      role="presentation"
-      onClick={() => {
+    <Dialog
+      title="Create workspace"
+      description="Keep notes, folders and instructions together in a separate workspace."
+      className={className}
+      onClose={() => {
         if (!submitting) onOpenChange(false);
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className={cn(
-          "w-full max-w-sm rounded-md border border-border bg-panel p-4 shadow-sm",
-          className,
-        )}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h2 id={titleId} className="text-[14px] font-semibold text-foreground">
-          Create workspace
-        </h2>
-        <p className="mt-1 text-[12px] text-muted-foreground">
-          Workspaces map to Better Auth organizations.
-        </p>
-        <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
-          <div className="space-y-1.5">
-            <label htmlFor="workspace-name" className="text-[12px] text-muted-foreground">
-              Workspace name
-            </label>
-            <Input
-              id="workspace-name"
-              name="name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Acme"
-              autoFocus
-              disabled={submitting}
-              aria-required="true"
-            />
-          </div>
-          {error ? (
-            <p className="text-[12px] text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={submitting}
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" size="sm" disabled={submitting}>
-              {submitting ? "Creating…" : "Create"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+      <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+        <div className="space-y-1.5">
+          <label
+            htmlFor="workspace-name"
+            className="text-[12px] text-muted-foreground"
+          >
+            Workspace name
+          </label>
+          <Input
+            id="workspace-name"
+            name="name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Acme"
+            autoFocus
+            disabled={submitting}
+            aria-required="true"
+          />
+        </div>
+        {error ? (
+          <p className="text-[12px] text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={submitting}
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={submitting}>
+            {submitting ? "Creating…" : "Create"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

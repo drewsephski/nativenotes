@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +42,10 @@ export function AccountMenu({ className }: AccountMenuProps) {
   if (isPending) {
     return (
       <div
-        className={cn("flex items-center gap-2 rounded-md px-2 py-1.5", className)}
+        className={cn(
+          "flex items-center gap-2 rounded-md px-2 py-1.5",
+          className,
+        )}
         aria-busy="true"
         aria-label="Loading account"
       >
@@ -63,13 +67,12 @@ export function AccountMenu({ className }: AccountMenuProps) {
     <div className={cn("space-y-1", className)}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button
+          <Button
             type="button"
+            variant="ghost"
             aria-label="Account menu"
             className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left",
-              "hover:bg-accent",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "h-auto w-full justify-start rounded-md px-2 py-1.5 text-left",
             )}
           >
             {image ? (
@@ -94,9 +97,11 @@ export function AccountMenu({ className }: AccountMenuProps) {
               <p className="truncate text-[12px] font-medium text-foreground">
                 {user.name || "Account"}
               </p>
-              <p className="truncate text-[11px] text-muted-foreground">{user.email}</p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {user.email}
+              </p>
             </div>
-          </button>
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="w-[220px]">
           <DropdownMenuLabel className="font-normal">
