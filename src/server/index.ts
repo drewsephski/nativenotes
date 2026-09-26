@@ -9,6 +9,7 @@ import { protectedMcpHandler } from "../mcp/handler.js";
 import { handleSignInRoute, handleSignUpRoute, handleGoogleSignInRoute } from "./auth-routes.js";
 import { handleConsentRoute } from "./consent-route.js";
 import { applyTrustedOriginCors } from "./cors.js";
+import { handleNotesRoute } from "./notes-route.js";
 import { renderHomePage } from "../ui/pages.js";
 import { writeHtml } from "../ui/html.js";
 
@@ -79,6 +80,20 @@ export function createNativeNotesRequestListener() {
 
     if (pathname === "/sign-in/google") {
       void handleGoogleSignInRoute(request, response).catch(() => {
+        if (!response.headersSent)
+          writeJson(response, 500, { error: "internal_server_error" });
+      });
+      return;
+    }
+
+    if (pathname === "/api/notes") {
+      // Cross-origin browser calls from the Next.js shell (e.g. :3001 → :3000).
+      if (applyTrustedOriginCors(request, response)) return;
+      void handleNotesRoute(request, response).catch((error) => {
+        console.error(
+          "notes route failure",
+          error instanceof Error ? error.message : "unknown",
+        );
         if (!response.headersSent)
           writeJson(response, 500, { error: "internal_server_error" });
       });

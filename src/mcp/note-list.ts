@@ -2,10 +2,8 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/server";
 
 import type { AuthContext } from "../domain/auth-context.js";
-import {
-  noteRepository,
-  type NoteRepository,
-} from "../repositories/note-repository.js";
+import type { NoteRepository } from "../repositories/note-repository.js";
+import { listNotes as listNotesFromService } from "../services/note-service.js";
 
 const noteOutput = z.object({
   id: z.string(),
@@ -15,20 +13,12 @@ const noteOutput = z.object({
   updatedAt: z.string(),
 });
 
+/** Re-export shared service entry for MCP + unit tests. */
 export async function listNotes(
   authContext: AuthContext,
-  repository: NoteRepository = noteRepository,
+  repository?: NoteRepository,
 ) {
-  const notes = await repository.listByTenant(authContext.tenantId);
-  return {
-    notes: notes.map((note) => ({
-      id: note.id,
-      title: note.title,
-      body: note.body,
-      createdAt: note.createdAt.toISOString(),
-      updatedAt: note.updatedAt.toISOString(),
-    })),
-  };
+  return listNotesFromService(authContext, repository);
 }
 
 export function createMcpServer(authContext: AuthContext): McpServer {

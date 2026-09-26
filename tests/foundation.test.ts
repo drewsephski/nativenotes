@@ -7,7 +7,7 @@ import {
 import { organizationConsentReferenceId } from "../src/auth/grant-binding.js";
 import { tenantClaim, tenantRoleClaim } from "../src/config/env.js";
 import { buildAuthContext } from "../src/mcp/tenant-auth.js";
-import { listNotes } from "../src/mcp/note-list.js";
+import { listNotes } from "../src/services/note-service.js";
 import {
   stableGrantIdentifier,
   type GrantBindingInput,

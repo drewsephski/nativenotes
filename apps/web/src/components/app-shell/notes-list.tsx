@@ -1,16 +1,14 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import {
-  formatRelativeTime,
-  type MockNote,
-} from "@/lib/mock-data";
+import { formatRelativeTime } from "@/lib/mock-data";
+import type { NoteListItem } from "@/lib/notes-api";
 import { EmptyState } from "@/components/app-shell/empty-state";
 
 interface NotesListProps {
-  notes: MockNote[];
+  notes: NoteListItem[];
   selectedId?: string | null;
-  onSelect: (note: MockNote) => void;
+  onSelect: (note: NoteListItem) => void;
   emptyTitle?: string;
   emptyDescription?: string;
   className?: string;
@@ -20,8 +18,8 @@ export function NotesList({
   notes,
   selectedId,
   onSelect,
-  emptyTitle = "No notes here yet.",
-  emptyDescription = "Create a note or move one into this folder.",
+  emptyTitle = "No notes yet.",
+  emptyDescription = "Your notes will appear here.",
   className,
 }: NotesListProps) {
   if (notes.length === 0) {
@@ -43,9 +41,11 @@ export function NotesList({
       {notes.map((note) => {
         const selected = note.id === selectedId;
         return (
-          <li key={note.id} role="option" aria-selected={selected}>
+          <li key={note.id}>
             <button
               type="button"
+              role="option"
+              aria-selected={selected}
               onClick={() => onSelect(note)}
               className={cn(
                 "flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors",
@@ -73,11 +73,6 @@ export function NotesList({
               <p className="line-clamp-2 text-[12px] leading-snug text-muted-foreground">
                 {note.preview}
               </p>
-              {note.tags[0] ? (
-                <span className="mt-0.5 w-fit rounded-sm border border-border px-1 py-px text-[10px] text-muted-foreground">
-                  {note.tags[0]}
-                </span>
-              ) : null}
             </button>
           </li>
         );
