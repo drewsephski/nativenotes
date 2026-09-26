@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { env, googleOAuthEnabled } from "../config/env.js";
+import { env, googleOAuthEnabled, trustedOrigins } from "../config/env.js";
 import { writeHtml } from "../ui/html.js";
 import {
   renderSignInPage,
@@ -11,7 +11,29 @@ import { trustedForwardOrigin } from "./request-origin.js";
 
 function oauthQueryFromRequest(request: IncomingMessage): string {
   const url = new URL(request.url ?? "/", env.BETTER_AUTH_URL);
-  return url.search.startsWith("?") ? url.search.slice(1) : url.search;
+  const params = new URLSearchParams(url.search);
+  params.delete("callbackURL");
+  return params.toString();
+}
+
+/**
+ * Return URL for the Next.js shell (or other trusted frontends).
+ * Validated against trustedOrigins so we never open redirects.
+ */
+function callbackURLFromRequest(request: IncomingMessage): string | undefined {
+  const url = new URL(request.url ?? "/", env.BETTER_AUTH_URL);
+  return sanitizeCallbackURL(url.searchParams.get("callbackURL"));
+}
+
+function sanitizeCallbackURL(value: string | null | undefined): string | undefined {
+  if (!value || value.trim().length === 0) return undefined;
+  try {
+    const parsed = new URL(value);
+    if (!trustedOrigins.includes(parsed.origin)) return undefined;
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
 }
 
 async function forwardAuthJson(
@@ -90,10 +112,13 @@ async function forwardAuthJson(
   }
 
   if (!upstream.ok) {
+    const failureCallbackURL =
+      typeof payload.callbackURL === "string" ? payload.callbackURL : undefined;
     const failurePage =
       mode === "sign-up"
         ? renderSignUpPage({
             oauthQuery,
+            callbackURL: failureCallbackURL,
             googleEnabled: googleOAuthEnabled,
             message: {
               text:
@@ -103,6 +128,7 @@ async function forwardAuthJson(
           })
         : renderSignInPage({
             oauthQuery,
+            callbackURL: failureCallbackURL,
             googleEnabled: googleOAuthEnabled,
             message: {
               text:
@@ -137,7 +163,9 @@ async function forwardAuthJson(
           authorizeUrl.search = oauthQuery;
           return authorizeUrl.toString();
         })()
-      : "/";
+      : typeof payload.callbackURL === "string" && payload.callbackURL.length > 0
+        ? payload.callbackURL
+        : "/";
 
   response.writeHead(303, {
     location: next,
@@ -160,6 +188,7 @@ export async function handleSignInRoute(
   response: ServerResponse,
 ): Promise<void> {
   const oauthQuery = oauthQueryFromRequest(request);
+  const callbackURL = callbackURLFromRequest(request);
 
   if (request.method === "GET") {
     writeHtml(
@@ -167,6 +196,7 @@ export async function handleSignInRoute(
       200,
       renderSignInPage({
         oauthQuery,
+        callbackURL,
         googleEnabled: googleOAuthEnabled,
       }),
     );
@@ -180,12 +210,14 @@ export async function handleSignInRoute(
   }
 
   const body = await readBody(request);
+  const formCallbackURL = sanitizeCallbackURL(body.callbackURL);
   if (!body.email || !body.password) {
     writeHtml(
       response,
       400,
       renderSignInPage({
         oauthQuery: body.oauth_query ?? oauthQuery,
+        callbackURL: formCallbackURL ?? callbackURL,
         googleEnabled: googleOAuthEnabled,
         message: { text: "Email and password are required." },
       }),
@@ -196,6 +228,7 @@ export async function handleSignInRoute(
   await forwardAuthJson(request, response, "/api/auth/sign-in/email", {
     email: body.email,
     password: body.password,
+    ...(formCallbackURL ? { callbackURL: formCallbackURL } : {}),
     ...(body.oauth_query ? { oauth_query: body.oauth_query } : {}),
   });
 }
@@ -205,6 +238,7 @@ export async function handleSignUpRoute(
   response: ServerResponse,
 ): Promise<void> {
   const oauthQuery = oauthQueryFromRequest(request);
+  const callbackURL = callbackURLFromRequest(request);
 
   if (request.method === "GET") {
     writeHtml(
@@ -212,6 +246,7 @@ export async function handleSignUpRoute(
       200,
       renderSignUpPage({
         oauthQuery,
+        callbackURL,
         googleEnabled: googleOAuthEnabled,
       }),
     );
@@ -225,12 +260,14 @@ export async function handleSignUpRoute(
   }
 
   const body = await readBody(request);
+  const formCallbackURL = sanitizeCallbackURL(body.callbackURL);
   if (!body.name || !body.email || !body.password) {
     writeHtml(
       response,
       400,
       renderSignUpPage({
         oauthQuery: body.oauth_query ?? oauthQuery,
+        callbackURL: formCallbackURL ?? callbackURL,
         googleEnabled: googleOAuthEnabled,
         message: { text: "Name, email, and password are required." },
       }),
@@ -246,6 +283,7 @@ export async function handleSignUpRoute(
       name: body.name,
       email: body.email,
       password: body.password,
+      ...(formCallbackURL ? { callbackURL: formCallbackURL } : {}),
       ...(body.oauth_query ? { oauth_query: body.oauth_query } : {}),
     },
     { mode: "sign-up" },
@@ -283,10 +321,11 @@ export async function handleGoogleSignInRoute(
 
   const body = await readBody(request);
   const oauthQuery = body.oauth_query ?? "";
+  const formCallbackURL = sanitizeCallbackURL(body.callbackURL);
 
   await forwardAuthJson(request, response, "/api/auth/sign-in/social", {
     provider: "google",
-    callbackURL: "/",
+    callbackURL: formCallbackURL ?? "/",
     ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
   });
 }

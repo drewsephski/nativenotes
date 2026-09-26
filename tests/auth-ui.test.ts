@@ -95,6 +95,17 @@ describe("auth UI pages", () => {
     expect(html).toContain('data-testid="sign-up-submit"');
   });
 
+  it("preserves trusted callbackURL for web app return", () => {
+    const html = renderSignInPage({
+      oauthQuery: "",
+      googleEnabled: true,
+      callbackURL: "http://localhost:3001/app",
+    });
+    expect(html).toContain('name="callbackURL"');
+    expect(html).toContain("http://localhost:3001/app");
+    expect(html).toContain("/sign-up?callbackURL=");
+  });
+
   it("renders consent with human scopes and workspace bootstrap", () => {
     const empty = renderConsentPage({
       organizations: [],

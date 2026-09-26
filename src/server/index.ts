@@ -8,6 +8,7 @@ import { env } from "../config/env.js";
 import { protectedMcpHandler } from "../mcp/handler.js";
 import { handleSignInRoute, handleSignUpRoute, handleGoogleSignInRoute } from "./auth-routes.js";
 import { handleConsentRoute } from "./consent-route.js";
+import { applyTrustedOriginCors } from "./cors.js";
 import { renderHomePage } from "../ui/pages.js";
 import { writeHtml } from "../ui/html.js";
 
@@ -88,6 +89,8 @@ export function createNativeNotesRequestListener() {
       pathname.startsWith("/api/auth") ||
       pathname.startsWith("/.well-known/")
     ) {
+      // Cross-origin browser calls from the Next.js shell (e.g. :3001 → :3000).
+      if (applyTrustedOriginCors(request, response)) return;
       void authHandler(request, response);
       return;
     }

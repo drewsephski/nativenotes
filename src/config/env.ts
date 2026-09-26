@@ -100,8 +100,16 @@ export const googleOAuthCallbackPath = "/api/auth/callback/google";
 /** Canonical public origin (no path). Prefer configuring BETTER_AUTH_URL to this. */
 export const publicOrigin = new URL(env.BETTER_AUTH_URL).origin;
 
+/**
+ * Local Next.js shell (`apps/web`) runs on :3001 while the auth API stays on :3000.
+ * Injected only outside production so production trusted-origin behavior is unchanged.
+ */
+const localWebDevOrigins =
+  env.NODE_ENV !== "production" ? ["http://localhost:3001"] : [];
+
 export const trustedOrigins: string[] = [
   publicOrigin,
+  ...localWebDevOrigins,
   ...(env.TRUSTED_ORIGINS
     ? env.TRUSTED_ORIGINS.split(",")
         .map((value) => value.trim())

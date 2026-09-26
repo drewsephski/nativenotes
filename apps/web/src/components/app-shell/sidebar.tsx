@@ -13,9 +13,10 @@ import {
   X,
 } from "lucide-react";
 import { WorkspaceSelector } from "@/components/app-shell/workspace-selector";
+import { AccountMenu } from "@/components/app-shell/account-menu";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { MOCK_FOLDERS, MOCK_USER } from "@/lib/mock-data";
+import { MOCK_FOLDERS } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
@@ -209,22 +210,7 @@ export function Sidebar({ open = true, onClose, className }: SidebarProps) {
             })}
           </ul>
           <Separator />
-          <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
-            <span
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-[10px] font-medium text-muted-foreground"
-              aria-hidden="true"
-            >
-              {MOCK_USER.initials}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[12px] font-medium text-foreground">
-                {MOCK_USER.name}
-              </p>
-              <p className="truncate text-[11px] text-muted-foreground">
-                {MOCK_USER.email}
-              </p>
-            </div>
-          </div>
+          <AccountMenu />
         </div>
       </aside>
     </>

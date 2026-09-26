@@ -7,6 +7,13 @@ import { ensureGrantBinding } from "../repositories/oauth-grant-tenant-repositor
 import { getCurrentMembership } from "../services/membership-service.js";
 import type { MembershipAdapter } from "../services/membership-service.js";
 
+/**
+ * Web active workspace is session UI state. MCP tenant is authorization-grant state.
+ * Dashboard org switching (Better Auth activeOrganization) must never mutate
+ * oauth_grant_tenant, MCP tenant claims, or consent grant binding — those are
+ * bound at authorize/consent time and remain grant-scoped.
+ */
+
 const organizationScope = "mcp:read";
 
 function badGrant(message: string): never {

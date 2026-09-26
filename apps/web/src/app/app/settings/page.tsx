@@ -4,15 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { MOCK_WORKSPACES } from "@/lib/mock-data";
 
 export const metadata: Metadata = {
   title: "Settings",
 };
 
 export default function SettingsPage() {
-  const workspace = MOCK_WORKSPACES[1] ?? MOCK_WORKSPACES[0];
-
   return (
     <div className="h-full overflow-y-auto">
       <div className="flex h-11 items-center border-b border-border px-4">
@@ -29,7 +26,8 @@ export default function SettingsPage() {
               Workspace
             </h2>
             <p className="mt-1 text-[12px] text-muted-foreground">
-              Basic workspace details. Persistence comes later.
+              Switch workspaces from the sidebar. Settings persistence comes
+              later.
             </p>
           </div>
           <div className="space-y-2">
@@ -41,7 +39,8 @@ export default function SettingsPage() {
             </label>
             <Input
               id="workspace-name"
-              defaultValue={workspace?.name ?? "Personal"}
+              defaultValue=""
+              placeholder="Use the sidebar workspace selector"
               readOnly
             />
           </div>
@@ -54,7 +53,8 @@ export default function SettingsPage() {
             </label>
             <Input
               id="workspace-slug"
-              defaultValue={workspace?.slug ?? "personal"}
+              defaultValue=""
+              placeholder="Managed by Better Auth organization"
               className="font-mono"
               readOnly
             />

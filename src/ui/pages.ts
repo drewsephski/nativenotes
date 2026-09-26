@@ -2,6 +2,7 @@ import {
   alertHtml,
   escapeHtml,
   googleIconSvg,
+  hiddenCallbackURL,
   hiddenOAuthQuery,
   renderDocument,
 } from "./html.js";
@@ -37,6 +38,7 @@ function oauthContextBanner(oauthQuery: string): string {
 
 function googleButton(input: {
   oauthQuery: string;
+  callbackURL?: string;
   enabled: boolean;
   label: string;
 }): string {
@@ -45,6 +47,7 @@ function googleButton(input: {
   }
   return `<form method="post" action="/sign-in/google" class="nn-stack">
 ${hiddenOAuthQuery(input.oauthQuery)}
+${hiddenCallbackURL(input.callbackURL)}
 <button type="submit" class="nn-btn nn-btn--secondary" data-testid="google-sign-in" aria-label="${escapeHtml(input.label)}">
 ${googleIconSvg()}
 <span>${escapeHtml(input.label)}</span>
@@ -55,14 +58,21 @@ ${googleIconSvg()}
 export function renderSignInPage(input: {
   oauthQuery: string;
   googleEnabled: boolean;
+  callbackURL?: string;
   message?: AuthPageMessage;
 }): string {
   const messageHtml = input.message
     ? alertHtml(input.message.text, input.message.tone ?? "error")
     : "";
-  const signUpHref = input.oauthQuery
-    ? `/sign-up?${input.oauthQuery}`
-    : "/sign-up";
+  const signUpParams = new URLSearchParams();
+  if (input.oauthQuery) {
+    new URLSearchParams(input.oauthQuery).forEach((value, key) => {
+      signUpParams.set(key, value);
+    });
+  }
+  if (input.callbackURL) signUpParams.set("callbackURL", input.callbackURL);
+  const signUpQuery = signUpParams.toString();
+  const signUpHref = signUpQuery ? `/sign-up?${signUpQuery}` : "/sign-up";
 
   const body = `<main class="nn-shell">
 <section class="nn-card" aria-labelledby="sign-in-title">
@@ -73,12 +83,14 @@ ${oauthContextBanner(input.oauthQuery)}
 ${messageHtml}
 ${googleButton({
     oauthQuery: input.oauthQuery,
+    callbackURL: input.callbackURL,
     enabled: input.googleEnabled,
     label: "Continue with Google",
   })}
 <div class="nn-separator" role="separator" aria-label="or">or</div>
 <form method="post" action="/sign-in" class="nn-stack" novalidate>
 ${hiddenOAuthQuery(input.oauthQuery)}
+${hiddenCallbackURL(input.callbackURL)}
 <div class="nn-field">
 <label class="nn-label" for="email">Email</label>
 <input class="nn-input" id="email" name="email" type="email" required autocomplete="username" data-testid="email-input" aria-required="true">
@@ -103,14 +115,21 @@ ${hiddenOAuthQuery(input.oauthQuery)}
 export function renderSignUpPage(input: {
   oauthQuery: string;
   googleEnabled: boolean;
+  callbackURL?: string;
   message?: AuthPageMessage;
 }): string {
   const messageHtml = input.message
     ? alertHtml(input.message.text, input.message.tone ?? "error")
     : "";
-  const signInHref = input.oauthQuery
-    ? `/sign-in?${input.oauthQuery}`
-    : "/sign-in";
+  const signInParams = new URLSearchParams();
+  if (input.oauthQuery) {
+    new URLSearchParams(input.oauthQuery).forEach((value, key) => {
+      signInParams.set(key, value);
+    });
+  }
+  if (input.callbackURL) signInParams.set("callbackURL", input.callbackURL);
+  const signInQuery = signInParams.toString();
+  const signInHref = signInQuery ? `/sign-in?${signInQuery}` : "/sign-in";
 
   const body = `<main class="nn-shell">
 <section class="nn-card" aria-labelledby="sign-up-title">
@@ -121,12 +140,14 @@ ${oauthContextBanner(input.oauthQuery)}
 ${messageHtml}
 ${googleButton({
     oauthQuery: input.oauthQuery,
+    callbackURL: input.callbackURL,
     enabled: input.googleEnabled,
     label: "Continue with Google",
   })}
 <div class="nn-separator" role="separator" aria-label="or">or</div>
 <form method="post" action="/sign-up" class="nn-stack" novalidate>
 ${hiddenOAuthQuery(input.oauthQuery)}
+${hiddenCallbackURL(input.callbackURL)}
 <div class="nn-field">
 <label class="nn-label" for="name">Name</label>
 <input class="nn-input" id="name" name="name" type="text" required autocomplete="name" data-testid="name-input" aria-required="true">

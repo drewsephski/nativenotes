@@ -1,13 +1,7 @@
 /**
  * Mock product data for the web shell.
- * Shaped for future Better Auth Organization + notes API wiring.
+ * Notes/folders remain mock; session and organizations are live Better Auth data.
  */
-
-export interface MockWorkspace {
-  id: string;
-  name: string;
-  slug: string;
-}
 
 export interface MockFolder {
   id: string;
@@ -29,11 +23,6 @@ export interface MockNote {
   trashed: boolean;
   deletedAt?: string;
 }
-
-export const MOCK_WORKSPACES: MockWorkspace[] = [
-  { id: "ws_personal", name: "Personal", slug: "personal" },
-  { id: "ws_team", name: "NativeNotes Team", slug: "nativenotes-team" },
-];
 
 export const MOCK_FOLDERS: MockFolder[] = [
   { id: "folder_product", name: "Product", noteCount: 2 },
@@ -213,12 +202,6 @@ Content merged elsewhere.`,
     deletedAt: "2026-09-19T09:30:00.000Z",
   },
 ];
-
-export const MOCK_USER = {
-  name: "Drew Sepeczi",
-  email: "drew@nativenotes.dev",
-  initials: "DS",
-};
 
 export function getActiveNotes(): MockNote[] {
   return MOCK_NOTES.filter((note) => !note.trashed);

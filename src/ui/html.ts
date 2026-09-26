@@ -62,3 +62,9 @@ export function hiddenOAuthQuery(oauthQuery: string): string {
   if (!oauthQuery) return "";
   return `<input type="hidden" name="oauth_query" value="${escapeHtml(oauthQuery)}">`;
 }
+
+/** Preserves Better Auth callbackURL through the custom HTML sign-in forms. */
+export function hiddenCallbackURL(callbackURL: string | undefined): string {
+  if (!callbackURL) return "";
+  return `<input type="hidden" name="callbackURL" value="${escapeHtml(callbackURL)}">`;
+}
