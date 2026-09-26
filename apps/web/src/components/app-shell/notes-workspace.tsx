@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Search } from "lucide-react";
+import { CreateNoteDialog } from "@/components/app-shell/create-note-dialog";
 import { NoteEditor } from "@/components/app-shell/note-editor";
 import { NotesList } from "@/components/app-shell/notes-list";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import {
   fetchNotes,
   toNoteListItem,
+  type Note,
   type NoteListItem,
   NotesApiError,
 } from "@/lib/notes-api";
@@ -69,6 +71,15 @@ function NotesWorkspaceLoader({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileShowEditor, setMobileShowEditor] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,7 +89,12 @@ function NotesWorkspaceLoader({
         if (cancelled) return;
         const items = notes.map(toNoteListItem);
         setLoadState({ status: "success", notes: items });
-        setSelectedId(items[0]?.id ?? null);
+        setSelectedId((current) => {
+          if (current && items.some((note) => note.id === current)) {
+            return current;
+          }
+          return items[0]?.id ?? null;
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -94,23 +110,43 @@ function NotesWorkspaceLoader({
     };
   }, [workspaceId, retryToken]);
 
+  async function handleNoteCreated(created: Note) {
+    // Prefer correctness: refetch active-tenant notes, then select the new ID.
+    // Workspace remount (key=workspaceId) discards this loader if the user
+    // switched tenants while the create request was in flight.
+    const notes = await fetchNotes();
+    if (!aliveRef.current) return;
+    const items = notes.map(toNoteListItem);
+    setLoadState({ status: "success", notes: items });
+    setSelectedId(created.id);
+    setMobileShowEditor(true);
+  }
+
   return (
-    <NotesWorkspaceFrame
-      title={title}
-      loadState={loadState}
-      selectedId={selectedId}
-      onSelect={(note) => {
-        setSelectedId(note.id);
-        setMobileShowEditor(true);
-      }}
-      mobileShowEditor={mobileShowEditor}
-      onBack={() => setMobileShowEditor(false)}
-      onRetry={() => {
-        setSelectedId(null);
-        setLoadState({ status: "loading" });
-        setRetryToken((value) => value + 1);
-      }}
-    />
+    <>
+      <NotesWorkspaceFrame
+        title={title}
+        loadState={loadState}
+        selectedId={selectedId}
+        onSelect={(note) => {
+          setSelectedId(note.id);
+          setMobileShowEditor(true);
+        }}
+        mobileShowEditor={mobileShowEditor}
+        onBack={() => setMobileShowEditor(false)}
+        onRetry={() => {
+          setSelectedId(null);
+          setLoadState({ status: "loading" });
+          setRetryToken((value) => value + 1);
+        }}
+        onCreateNote={() => setCreateOpen(true)}
+      />
+      <CreateNoteDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={handleNoteCreated}
+      />
+    </>
   );
 }
 
@@ -122,6 +158,7 @@ function NotesWorkspaceFrame({
   mobileShowEditor = false,
   onBack,
   onRetry,
+  onCreateNote,
 }: {
   title: string;
   loadState: LoadState;
@@ -130,6 +167,7 @@ function NotesWorkspaceFrame({
   mobileShowEditor?: boolean;
   onBack?: () => void;
   onRetry?: () => void;
+  onCreateNote?: () => void;
 }) {
   const notes =
     loadState.status === "success" ? loadState.notes : ([] as NoteListItem[]);
@@ -162,8 +200,8 @@ function NotesWorkspaceFrame({
             type="button"
             size="sm"
             aria-label="New note"
-            disabled
-            title="Note creation is not available yet"
+            disabled={!onCreateNote || isLoading || isError}
+            onClick={onCreateNote}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             New note
@@ -218,6 +256,7 @@ function NotesWorkspaceFrame({
             onSelect={onSelect ?? (() => undefined)}
             emptyTitle="No notes yet."
             emptyDescription="Your notes will appear here."
+            onCreateNote={onCreateNote}
             className="min-h-0 flex-1"
           />
         )}

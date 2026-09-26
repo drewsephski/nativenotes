@@ -3,7 +3,7 @@
 import { ArrowLeft } from "lucide-react";
 import { EmptyState } from "@/components/app-shell/empty-state";
 import { Button } from "@/components/ui/button";
-import { formatRelativeTime } from "@/lib/mock-data";
+import { formatRelativeTime } from "@/lib/date";
 import type { NoteListItem } from "@/lib/notes-api";
 import { cn } from "@/lib/utils";
 

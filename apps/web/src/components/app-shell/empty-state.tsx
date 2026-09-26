@@ -1,12 +1,21 @@
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface EmptyStateProps {
   title: string;
   description?: string;
+  actionLabel?: string;
+  onAction?: () => void;
   className?: string;
 }
 
-export function EmptyState({ title, description, className }: EmptyStateProps) {
+export function EmptyState({
+  title,
+  description,
+  actionLabel,
+  onAction,
+  className,
+}: EmptyStateProps) {
   return (
     <div
       className={cn(
@@ -19,6 +28,18 @@ export function EmptyState({ title, description, className }: EmptyStateProps) {
         <p className="mt-1 max-w-[240px] text-[12px] text-muted-foreground">
           {description}
         </p>
+      ) : null}
+      {actionLabel && onAction ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          onClick={onAction}
+          aria-label={actionLabel}
+        >
+          {actionLabel}
+        </Button>
       ) : null}
     </div>
   );
