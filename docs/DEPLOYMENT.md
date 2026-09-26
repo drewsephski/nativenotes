@@ -174,9 +174,8 @@ Better Auth 1.7.6 callback path (with `basePath: /api/auth`):
 | --- | --- |
 | Local | `http://localhost:3000/api/auth/callback/google` |
 | Production (canonical) | `https://nativenotes.app/api/auth/callback/google` |
-| Temporary during rollout | `https://nativenotes.vercel.app/api/auth/callback/google` |
 
-Set the local + canonical URIs on the same Google Cloud OAuth Web client. Keep the temporary backend hostname URI only until cutover smoke is green, then remove it. Without `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, the Google button is disabled and email/password remains available.
+Set the local + canonical URIs on the same Google Cloud OAuth Web client. The temporary backend callback `https://nativenotes.vercel.app/api/auth/callback/google` was removed after the committed main deployment passed verification (see release completion below). Without `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, the Google button is disabled and email/password remains available.
 
 Account linking uses Better Auth defaults: a verified Google email matching an existing email/password user is linked to that user (`allowDifferentEmails` is not enabled).
 
@@ -374,7 +373,7 @@ Issuer, audience, and claim namespace migration invalidates old client assumptio
 - Browser QA also found a pre-existing schema mismatch: checked-in backend queries `notes.version`, but production had not applied `0002_previous_kingpin.sql`. With explicit user approval, that exact additive migration and its Drizzle journal record were applied together on the production branch. Existing notes were preserved. No new editing implementation was added.
 - Created the labeled note `Production routing smoke check — 2026-09-26` to verify same-origin production writes and persistence across logout/login.
 - ChatGPT canonical replacement **NativeNotes App** connects to `https://nativenotes.app/mcp`. Live signed-out authorization went through Google and consent; backend logs confirm consent submit/redirect, token exchange 200, and authenticated MCP discovery/tool listing with apex issuer and audience. The ChatGPT read-only check confirmed the production smoke note exists. The old **NativeNotes** connector still points at the backend hostname; its stale reconnect was not approved. Retain it only for rollout reference and remove it during cleanup; use **NativeNotes App** going forward.
-- Old Google callback entries are temporarily retained for rollout cleanup. Old host sessions/tokens do not transfer to apex. No auth secret rotation, wildcard CORS, proxy-header trust, or old-audience exception was introduced.
+- At the initial cutover, old Google callback entries were temporarily retained; the backend callback has since been removed (see release completion below). Old host sessions/tokens do not transfer to apex. No auth secret rotation, wildcard CORS, proxy-header trust, or old-audience exception was introduced.
 - Backend logs warn that Better Auth cannot resolve a trusted client IP and uses a shared per-path rate-limit bucket. Leave this protection intact; a separate platform-aware rate-limit review is needed before introducing any proxy-header trust.
 - Live email login was not exercised with the user's password; email intent and redirects are covered by HTTP route and database-backed lifecycle tests.
 
@@ -389,3 +388,10 @@ After the committed main deployment passes smoke, app Google login, workspace/no
 **User-managed ChatGPT cleanup:** remove the old connector named **NativeNotes**. Retain **NativeNotes App**, pointing to `https://nativenotes.app/mcp`, and its existing working grant. Do not automate ChatGPT configuration changes.
 
 For an ordinary release rollback, promote the last known-good backend and web deployments while retaining the apex canonical variables and domain ownership. The additive version migration remains compatible; do not drop the column. Restoring the pre-cutover identity is a separate coordinated rollback that also requires reinstating old provider callbacks and reconnecting clients.
+
+### Release completion — 2026-09-26
+
+- PR [#4](https://github.com/drewsephski/nativenotes/pull/4) merged as `ff96cd9b7479b9f2030916359ae89db13fa5c507` after all checks passed. Main CI also passed. Both production projects reached Ready on that exact commit: backend `dpl_BLyxn2JUiMt1ejiWi3YuYeoPx2Ub`, web `dpl_AxdaVQGw6qZWHS1CHmhdhdB4U21s`.
+- Post-merge canonical smoke passed health, AS metadata, PRM, JWKS, anonymous MCP 401, public issuer/resource, and no internal hostname leakage. Fresh Google login returned to `/app`; workspace selection and notes loaded. The user independently confirmed a successful ChatGPT read using the existing **NativeNotes App** grant.
+- Only after those checks, the old `https://nativenotes.vercel.app/api/auth/callback/google` redirect was removed from the Google OAuth client. Reopening the saved client confirmed its absence and retention of apex and localhost. The separately existing www callback and JavaScript origins were left unchanged; no credentials were rotated. Google warns provider changes can take minutes to hours to propagate.
+- The old **NativeNotes** ChatGPT connector still needs user-managed removal. No ChatGPT configuration or working grant was changed programmatically.
