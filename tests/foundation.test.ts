@@ -1,4 +1,14 @@
-const noteDefaults = { folderId: null, summary: null, favorited: false, freshness: "current" as const, verifiedAt: null, archivedAt: null, trashedAt: null, purgeAfter: null, createdByUserId: null };
+const noteDefaults = {
+  folderId: null,
+  summary: null,
+  favorited: false,
+  freshness: "current" as const,
+  verifiedAt: null,
+  archivedAt: null,
+  trashedAt: null,
+  purgeAfter: null,
+  createdByUserId: null,
+};
 import { describe, expect, it } from "vitest";
 
 import {

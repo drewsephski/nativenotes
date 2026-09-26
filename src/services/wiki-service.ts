@@ -22,12 +22,16 @@ export function resolveWikiGraph(
     byTitle.set(key, [...(byTitle.get(key) ?? []), row.id]);
   }
   const edges: { source: string; target: string; title: string }[] = [];
-  for (const row of rows)
+  for (const row of rows) {
+    const targets = new Set<string>();
     for (const title of wikiTitles(row.body)) {
       const matches = byTitle.get(title.toLowerCase());
-      if (matches?.length === 1)
+      if (matches?.length === 1 && !targets.has(matches[0]!)) {
+        targets.add(matches[0]!);
         edges.push({ source: row.id, target: matches[0]!, title });
+      }
     }
+  }
   return { nodes: rows.map(({ id, title }) => ({ id, title })), edges };
 }
 export async function wikiGraph(tenantId: string) {

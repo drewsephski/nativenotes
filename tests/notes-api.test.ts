@@ -1,4 +1,14 @@
-const noteDefaults = { folderId: null, summary: null, favorited: false, freshness: "current" as const, verifiedAt: null, archivedAt: null, trashedAt: null, purgeAfter: null, createdByUserId: null };
+const noteDefaults = {
+  folderId: null,
+  summary: null,
+  favorited: false,
+  freshness: "current" as const,
+  verifiedAt: null,
+  archivedAt: null,
+  trashedAt: null,
+  purgeAfter: null,
+  createdByUserId: null,
+};
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -37,17 +47,12 @@ vi.mock("better-auth/node", () => ({
 }));
 
 const { handleNotesRoute } = await import("../src/server/notes-route.js");
-const {
-  createNoteForTenant,
-  updateNoteForTenant,
-} = await import("../src/services/note-service.js");
-const { isTrustedMutationOrigin } = await import(
-  "../src/server/request-origin.js"
-);
-const {
-  NoteNotFoundError,
-  NoteVersionConflictError,
-} = await import("../src/domain/errors.js");
+const { createNoteForTenant, updateNoteForTenant } =
+  await import("../src/services/note-service.js");
+const { isTrustedMutationOrigin } =
+  await import("../src/server/request-origin.js");
+const { NoteNotFoundError, NoteVersionConflictError } =
+  await import("../src/domain/errors.js");
 
 function fakeGetRequest(url = "/api/notes"): IncomingMessage {
   return {

@@ -1,4 +1,4 @@
-# Grokbot computer-use QA handoff — NativeNotes Google OAuth / ChatGPT
+# Grokbot computer-use QA handoff — NativeNotes product parity
 
 Production origin: `https://nativenotes.app`
 
@@ -23,7 +23,9 @@ When fixing reproducible UI/auth bugs:
    - `pnpm typecheck`
    - `pnpm test`
    - `pnpm build`
-6. Do **not** implement folders, tags, search, revisions, or additional MCP tools.
+6. Exercise the implemented folders, tags, search, history, instructions, freshness, graph and MCP tools. Fix reproducible bugs in these features while preserving architecture and tenant safety. Never add fake controls or relax a release gate.
+7. After product fixes also run web lint, typecheck, test and build. Use the package manager and existing conventions.
+8. Preserve user content; use clearly labeled QA items. Sharing is intentionally absent. Do not add public access or permanent deletion.
 
 ## Stable anchors
 
@@ -117,3 +119,14 @@ For each scenario:
 1. `GET https://nativenotes.app/sign-in` — polished UI, Google primary, email fallback.
 2. Click `[data-testid="google-sign-in"]` — must reach `accounts.google.com` (not “Missing or null Origin”).
 3. Stop before completing Google login if interactive account selection requires the human operator; hand off remaining ChatGPT steps to the operator when needed.
+
+
+## Product parity mission
+
+Run every scenario in the **Product parity release** table in [QA.md](./QA.md), including desktop/mobile/keyboard and workspace isolation. Use Dia computer-use. The product has real folder settings, tag management, metadata, revision history, instruction inheritance and read/write MCP scopes. The web active workspace must never retarget an MCP grant.
+
+Use [PRODUCT-MODEL.md](./PRODUCT-MODEL.md) for intended semantics: direct folder counts; archive folder only; Trash preserves prior archive state; metadata does not increment content version; restore creates a new revision; ambiguous wiki titles do not resolve.
+
+You may fix reproducible defects, add focused regression coverage, and rerun validation. Do not rewrite auth, change framework/deployment architecture, bypass optimistic locking, weaken composite tenant foreign keys, make migrations destructive, add embeddings, or implement background purge. Keep new work in logical commits.
+
+Report each scenario as Passed / Failed / Not exercised, with deployment, browser/viewport, reproduction, observed result, fix and verification. Distinguish automated isolated OAuth write proof from real ChatGPT interaction; do not claim the latter from a tool listing alone. A real client permission expansion requires the user's action/approval. The existing working ChatGPT grant must remain usable.

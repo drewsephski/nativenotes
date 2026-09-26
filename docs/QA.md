@@ -211,3 +211,47 @@ For each scenario, record:
 - URL at failure
 - Visible error text (no tokens/secrets)
 - Whether `note.list` / tenant isolation was checked
+
+## Product parity release — required browser scenarios
+
+Use **Dia** when available. Test the real deployed application, not mocked fixtures. Use roles, accessible names and URLs for the product UI. Create clearly labeled QA notes/folders; preserve existing user content. Mark each scenario Passed, Failed or Not exercised with evidence and the deployment identifier.
+
+| Area | Computer-use procedure | Expected result |
+| --- | --- | --- |
+| Navigation | Visit All Notes, Inbox, Favorites, Folders, Tags, AI Instructions, Graph, Archive, Trash and Workspace & team | Every visible control works. Sidebar is left, light and approximately 232px. Counts reflect persisted state. |
+| Folders | Create root and child; collapse/expand; rename; move child between parents; change sort position | Tree and filtered collection update. Counts mean directly contained active notes. Self/descendant parents are unavailable and rejected by API. |
+| Folder archive | Archive parent and restore it from Folders | Notes remain in All Notes. Descendants remain accessible. No permanent folder deletion. |
+| Notes | New note → Markdown/summary → create → Edit → Save; edit again → Cancel | Viewer renders content and summary; cancel retains last saved content; version increments only on content save. |
+| Drafts | Edit a note, navigate away and return in the same tab | Unsaved draft is retained for that user/workspace/note. Cancel explicitly discards it. |
+| Conflicts | Open same note in two tabs; save first, save stale second | Second save fails; draft stays intact. Reload latest preserves old draft for comparison. No silent retry or overwrite. |
+| Metadata | Move note to nested folder; verify breadcrumbs, Created, Updated, Version and author | Actual persisted values; unknown authors are identified honestly. |
+| Tags | Create/assign/remove tag; rename it; merge into another assigned tag; delete tag after confirmation | Tenant-local unique names, correct counts, no duplicate assignments, no note deletion. Click tag to filter notes. |
+| Favorites | Toggle star from document and inspector, visit Favorites | Immediate state and persisted filtered result agree after reload. |
+| Archive | Archive note, visit All Notes and Archive, restore | Hidden from active collections, visible in Archive, restoration works. |
+| Trash | Trash an archived note; inspect retention date; restore | Hidden from active/Archive views; restored to its previous archived state. No hard-delete or purge control. |
+| Search | Cmd/Ctrl+K; search title/body/summary/tag/folder; press Escape | Matching notes, snippets, folder and updated time; focus remains in dialog and returns on close. No results from other workspace. |
+| Instructions | Save workspace rules; save parent and child folder rules in folder settings | Reload persists text; inheritance order workspace → ancestors → current folder is explicit. |
+| History | Save twice, open History, inspect earlier snapshot, restore | New content version and new revision; old revisions remain unchanged. |
+| Freshness | Select Needs review/Superseded; Confirm still true | Real status/time persist without changing body/version. A later content edit clears confirmation. |
+| Wiki links | Link `[[Exact title]]`; inspect target backlinks and Graph | Same-workspace active note resolves. Duplicate titles remain unresolved. Code blocks do not create links. Click graph node to open note. |
+| Settings | Inspect workspace name/slug/team; owner updates a disposable workspace name | Real organization data. MCP endpoint says Enabled, never claims a particular client is connected. |
+| Workspace safety | Switch A→B during loads and with draft; test a stale tab after switch | No A content flashes in B. Stale workspace requests fail. Drafts remain scoped to user/workspace. |
+| Mobile/tablet | Test ~390px, 768px, 1024px and desktop; use sidebar and About sheets | No horizontal overflow. Notes list → document navigation, working dialogs, reachable inspector and focus controls. |
+| Keyboard | Tab/Shift+Tab through sidebar, folders, list, edit form and dialogs; Escape closes overlays | Visible focus, semantic labels, focus containment/restoration, all operations reachable. |
+| Errors | Invalid name, duplicate tag, missing note, stale version, network loss and revoked membership | Clear error, no false success, preserved draft, retry where applicable. |
+
+### MCP product proof
+
+Existing read-only grants remain read-only. A new explicitly consented `mcp:write` grant is required for note/folder/tag mutations; `mcp:instructions` is required for `instructions.set`. Browser QA must not expand a real client's permissions without the user's action/approval. Run automated OAuth write tests against TEST_DATABASE_URL for repeatable write proof.
+
+1. With read-only grant, list/get/search notes, list folders/tags and retrieve inherited instructions. A write must be unavailable/rejected.
+2. With a disposable write grant, create/update/favorite/archive/trash/restore a note and create/update a folder; create/assign/remove tags.
+3. Submit a stale `expectedVersion` and verify no overwrite or extra revision.
+4. Switch the web active workspace and repeat the MCP write: grant tenant stays unchanged.
+5. Remove membership; reads and writes must both fail even with an unexpired token.
+6. Attempt foreign note/folder/tag IDs and forged tenant input: no cross-workspace read/write.
+7. General write scope alone must not authorize `instructions.set`; instructions scope alone must not authorize note writes.
+
+### Release gates
+
+Run root lint/typecheck/test/build and web lint/typecheck/test/build. The root suite includes real database and OAuth integration tests and requires TEST_DATABASE_URL. Inspect/apply generated migration there before production. Production migration uses the unpooled Neon URL explicitly, never a build hook. Record a before/after aggregate of existing note content to verify preservation. Deploy backend before web, then run `pnpm smoke:remote https://nativenotes.app` and browser checks. Never weaken a failing isolation, cycle, revision transaction, scope, grant-binding or OAuth test to ship.
