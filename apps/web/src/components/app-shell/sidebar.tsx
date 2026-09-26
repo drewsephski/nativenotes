@@ -124,12 +124,17 @@ export function Sidebar({ open = true, onClose, className }: SidebarProps) {
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label="New folder"
+                aria-label="New folder (not available yet)"
+                disabled
+                title="Folders are not wired yet"
                 className="h-6 w-6 text-muted-foreground"
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               </Button>
             </div>
+            <p className="mb-1 px-2 text-[10px] text-muted-foreground/80">
+              Preview only — not wired
+            </p>
             <ul className="space-y-0.5" role="list">
               {rootFolders.map((folder) => {
                 const children = MOCK_FOLDERS.filter(
@@ -139,9 +144,11 @@ export function Sidebar({ open = true, onClose, className }: SidebarProps) {
                   <li key={folder.id}>
                     <button
                       type="button"
+                      disabled
+                      title="Folders are not wired yet"
                       className={cn(
                         "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-muted-foreground",
-                        "hover:bg-accent hover:text-accent-foreground",
+                        "opacity-70",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       )}
                     >
@@ -157,9 +164,11 @@ export function Sidebar({ open = true, onClose, className }: SidebarProps) {
                           <li key={child.id}>
                             <button
                               type="button"
+                              disabled
+                              title="Folders are not wired yet"
                               className={cn(
                                 "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[12px] text-muted-foreground",
-                                "hover:bg-accent hover:text-accent-foreground",
+                                "opacity-70",
                                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                               )}
                             >

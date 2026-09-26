@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { auth } from "../auth/auth.js";
 import { env, googleOAuthEnabled, trustedOrigins } from "../config/env.js";
 import { writeHtml } from "../ui/html.js";
 import {
@@ -7,13 +8,15 @@ import {
   renderSignUpPage,
   renderSimpleStatusPage,
 } from "../ui/pages.js";
+import {
+  isExternalAuthRedirect,
+  sanitizeOAuthQuery,
+} from "./auth-forward.js";
 import { trustedForwardOrigin } from "./request-origin.js";
 
 function oauthQueryFromRequest(request: IncomingMessage): string {
   const url = new URL(request.url ?? "/", env.BETTER_AUTH_URL);
-  const params = new URLSearchParams(url.search);
-  params.delete("callbackURL");
-  return params.toString();
+  return sanitizeOAuthQuery(url.searchParams.toString());
 }
 
 /**
@@ -45,31 +48,42 @@ async function forwardAuthJson(
 ): Promise<void> {
   const mode = options?.mode ?? "sign-in";
   const oauthQuery =
-    typeof payload.oauth_query === "string" ? payload.oauth_query : "";
+    typeof payload.oauth_query === "string"
+      ? sanitizeOAuthQuery(payload.oauth_query)
+      : "";
+  if (typeof payload.oauth_query === "string") {
+    if (oauthQuery) payload.oauth_query = oauthQuery;
+    else delete payload.oauth_query;
+  }
 
-  const upstream = await fetch(new URL(path, env.BETTER_AUTH_URL), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      accept: "application/json",
-      origin: trustedForwardOrigin(request),
-      ...(request.headers.cookie
-        ? {
-            cookie: Array.isArray(request.headers.cookie)
-              ? request.headers.cookie.join("; ")
-              : request.headers.cookie,
-          }
-        : {}),
-    },
-    body: JSON.stringify(payload),
-    redirect: "manual",
-  });
+  // In-process Better Auth call — never HTTP self-fetch.
+  // Public fetch(BETTER_AUTH_URL) hits Vercel apex→www 308 and was incorrectly
+  // forwarded to the browser as Location: /api/auth/sign-in/social.
+  const upstream = await auth.handler(
+    new Request(new URL(path, env.BETTER_AUTH_URL), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        origin: trustedForwardOrigin(request),
+        ...(request.headers.cookie
+          ? {
+              cookie: Array.isArray(request.headers.cookie)
+                ? request.headers.cookie.join("; ")
+                : request.headers.cookie,
+            }
+          : {}),
+      },
+      body: JSON.stringify(payload),
+      redirect: "manual",
+    }),
+  );
 
   const setCookie = upstream.headers.getSetCookie?.() ?? [];
   if (setCookie.length > 0) response.setHeader("set-cookie", setCookie);
 
   const location = upstream.headers.get("location");
-  if (location) {
+  if (location && isExternalAuthRedirect(location)) {
     response.writeHead(303, {
       location,
       "cache-control": "no-store",
@@ -211,12 +225,13 @@ export async function handleSignInRoute(
 
   const body = await readBody(request);
   const formCallbackURL = sanitizeCallbackURL(body.callbackURL);
+  const formOAuthQuery = sanitizeOAuthQuery(body.oauth_query ?? oauthQuery);
   if (!body.email || !body.password) {
     writeHtml(
       response,
       400,
       renderSignInPage({
-        oauthQuery: body.oauth_query ?? oauthQuery,
+        oauthQuery: formOAuthQuery,
         callbackURL: formCallbackURL ?? callbackURL,
         googleEnabled: googleOAuthEnabled,
         message: { text: "Email and password are required." },
@@ -229,7 +244,7 @@ export async function handleSignInRoute(
     email: body.email,
     password: body.password,
     ...(formCallbackURL ? { callbackURL: formCallbackURL } : {}),
-    ...(body.oauth_query ? { oauth_query: body.oauth_query } : {}),
+    ...(formOAuthQuery ? { oauth_query: formOAuthQuery } : {}),
   });
 }
 
@@ -261,12 +276,13 @@ export async function handleSignUpRoute(
 
   const body = await readBody(request);
   const formCallbackURL = sanitizeCallbackURL(body.callbackURL);
+  const formOAuthQuery = sanitizeOAuthQuery(body.oauth_query ?? oauthQuery);
   if (!body.name || !body.email || !body.password) {
     writeHtml(
       response,
       400,
       renderSignUpPage({
-        oauthQuery: body.oauth_query ?? oauthQuery,
+        oauthQuery: formOAuthQuery,
         callbackURL: formCallbackURL ?? callbackURL,
         googleEnabled: googleOAuthEnabled,
         message: { text: "Name, email, and password are required." },
@@ -284,7 +300,7 @@ export async function handleSignUpRoute(
       email: body.email,
       password: body.password,
       ...(formCallbackURL ? { callbackURL: formCallbackURL } : {}),
-      ...(body.oauth_query ? { oauth_query: body.oauth_query } : {}),
+      ...(formOAuthQuery ? { oauth_query: formOAuthQuery } : {}),
     },
     { mode: "sign-up" },
   );
@@ -320,7 +336,7 @@ export async function handleGoogleSignInRoute(
   }
 
   const body = await readBody(request);
-  const oauthQuery = body.oauth_query ?? "";
+  const oauthQuery = sanitizeOAuthQuery(body.oauth_query ?? "");
   const formCallbackURL = sanitizeCallbackURL(body.callbackURL);
 
   await forwardAuthJson(request, response, "/api/auth/sign-in/social", {

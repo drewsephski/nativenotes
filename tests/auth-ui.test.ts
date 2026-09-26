@@ -12,6 +12,10 @@ import {
   renderSignUpPage,
 } from "../src/ui/pages.js";
 import { googleOAuthCallbackPath, publicOrigin } from "../src/config/env.js";
+import {
+  isExternalAuthRedirect,
+  sanitizeOAuthQuery,
+} from "../src/server/auth-forward.js";
 import { trustedForwardOrigin } from "../src/server/request-origin.js";
 import type { IncomingMessage } from "node:http";
 
@@ -66,6 +70,34 @@ describe("auth display helpers", () => {
       ),
     ).toBe("https://nativenotes.vercel.app");
     expect(trustedForwardOrigin(fakeRequest({}))).toBe(publicOrigin);
+  });
+
+  it("strips Vercel share params from oauth_query", () => {
+    expect(
+      sanitizeOAuthQuery(
+        "_vercel_share=abc&client_id=https://chatgpt.com/oauth/client.json",
+      ),
+    ).toBe("client_id=https%3A%2F%2Fchatgpt.com%2Foauth%2Fclient.json");
+    expect(sanitizeOAuthQuery("_vercel_share=only")).toBe("");
+  });
+
+  it("treats apex→www and relative auth Locations as non-browser redirects", () => {
+    const base = "https://nativenotes.app";
+    expect(
+      isExternalAuthRedirect(
+        "https://www.nativenotes.app/api/auth/sign-in/social",
+        base,
+      ),
+    ).toBe(false);
+    expect(
+      isExternalAuthRedirect("/api/auth/sign-in/social", base),
+    ).toBe(false);
+    expect(
+      isExternalAuthRedirect(
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id=x",
+        base,
+      ),
+    ).toBe(true);
   });
 });
 

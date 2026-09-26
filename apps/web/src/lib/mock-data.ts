@@ -1,6 +1,7 @@
 /**
  * Mock product data for the web shell.
- * Notes/folders remain mock; session and organizations are live Better Auth data.
+ * Folders remain visual placeholders; notes load from GET /api/notes.
+ * Session and organizations are live Better Auth data.
  */
 
 export interface MockFolder {
