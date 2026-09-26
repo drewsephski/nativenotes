@@ -16,12 +16,11 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex h-dvh min-h-0 overflow-hidden bg-background">
-        <Sidebar
-          open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-11 items-center gap-2 border-b border-border px-3 md:hidden">
+            <span className="min-w-0 flex-1 text-[13px] font-semibold tracking-tight">
+              NativeNotes
+            </span>
             <Button
               type="button"
               variant="ghost"
@@ -33,12 +32,13 @@ export function AppShell({ children }: AppShellProps) {
             >
               <Menu className="h-4 w-4" aria-hidden="true" />
             </Button>
-            <span className="text-[13px] font-semibold tracking-tight">
-              NativeNotes
-            </span>
           </div>
           <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
         </div>
+        <Sidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        />
       </div>
     </TooltipProvider>
   );

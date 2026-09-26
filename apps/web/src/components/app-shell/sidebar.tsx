@@ -57,9 +57,9 @@ export function Sidebar({ open = true, onClose, className }: SidebarProps) {
         id="app-sidebar"
         aria-label="Main navigation"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[232px] flex-col border-r border-border bg-sidebar text-sidebar-foreground",
+          "fixed inset-y-0 right-0 z-50 flex w-[232px] flex-col border-l border-border bg-sidebar text-sidebar-foreground",
           "transition-transform duration-200 ease-out md:static md:translate-x-0",
-          open ? "translate-x-0" : "-translate-x-full",
+          open ? "translate-x-0" : "translate-x-full",
           className,
         )}
       >
