@@ -1,13 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authClient, useSession } from "@/lib/auth-client";
-import {
-  slugifyWorkspaceName,
-  suggestedWorkspaceName,
-} from "@/lib/workspace";
+import { slugifyWorkspaceName, suggestedWorkspaceName } from "@/lib/workspace";
 
 interface WorkspaceOnboardingProps {
   onCreated?: () => void;
@@ -69,6 +67,7 @@ export function WorkspaceOnboarding({ onCreated }: WorkspaceOnboardingProps) {
   return (
     <div className="flex h-full min-h-0 items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-4">
+        <BrandLogo className="mb-4" />
         <div className="space-y-1">
           <h1 className="text-[15px] font-semibold tracking-tight text-foreground">
             Create your first workspace

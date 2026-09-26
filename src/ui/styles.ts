@@ -53,7 +53,7 @@ a:hover { opacity: 0.75; }
 }
 
 .nn-shell {
-  min-height: 100vh;
+  min-height: calc(100svh - 64px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -86,6 +86,29 @@ a:hover { opacity: 0.75; }
   letter-spacing: -0.02em;
   margin: 0 0 var(--nn-space-2);
 }
+
+.nn-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #292622;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.nn-logo img { display: block; flex-shrink: 0; }
+
+.nn-brand-footer {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 24px;
+  font-size: 12px;
+}
+
+.nn-brand-footer .nn-logo { gap: 7px; color: var(--nn-muted); font-weight: 500; }
+.nn-brand-footer img { width: 18px; height: 18px; }
 
 .nn-title {
   font-size: 1.25rem;

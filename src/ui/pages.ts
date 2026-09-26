@@ -1,5 +1,6 @@
 import {
   alertHtml,
+  brandHtml,
   escapeHtml,
   googleIconSvg,
   hiddenCallbackURL,
@@ -76,17 +77,17 @@ export function renderSignInPage(input: {
 
   const body = `<main class="nn-shell">
 <section class="nn-card" aria-labelledby="sign-in-title">
-<p class="nn-brand">NativeNotes</p>
+<p class="nn-brand">${brandHtml()}</p>
 <h1 class="nn-title" id="sign-in-title">Sign in</h1>
 <p class="nn-subtitle">Secure access for your notes and MCP connections.</p>
 ${oauthContextBanner(input.oauthQuery)}
 ${messageHtml}
 ${googleButton({
-    oauthQuery: input.oauthQuery,
-    callbackURL: input.callbackURL,
-    enabled: input.googleEnabled,
-    label: "Continue with Google",
-  })}
+  oauthQuery: input.oauthQuery,
+  callbackURL: input.callbackURL,
+  enabled: input.googleEnabled,
+  label: "Continue with Google",
+})}
 <div class="nn-separator" role="separator" aria-label="or">or</div>
 <form method="post" action="/sign-in" class="nn-stack" novalidate>
 ${hiddenOAuthQuery(input.oauthQuery)}
@@ -133,17 +134,17 @@ export function renderSignUpPage(input: {
 
   const body = `<main class="nn-shell">
 <section class="nn-card" aria-labelledby="sign-up-title">
-<p class="nn-brand">NativeNotes</p>
+<p class="nn-brand">${brandHtml()}</p>
 <h1 class="nn-title" id="sign-up-title">Create account</h1>
 <p class="nn-subtitle">Start with Google, or use email and password.</p>
 ${oauthContextBanner(input.oauthQuery)}
 ${messageHtml}
 ${googleButton({
-    oauthQuery: input.oauthQuery,
-    callbackURL: input.callbackURL,
-    enabled: input.googleEnabled,
-    label: "Continue with Google",
-  })}
+  oauthQuery: input.oauthQuery,
+  callbackURL: input.callbackURL,
+  enabled: input.googleEnabled,
+  label: "Continue with Google",
+})}
 <div class="nn-separator" role="separator" aria-label="or">or</div>
 <form method="post" action="/sign-up" class="nn-stack" novalidate>
 ${hiddenOAuthQuery(input.oauthQuery)}
@@ -177,7 +178,7 @@ ${hiddenCallbackURL(input.callbackURL)}
 export function renderHomePage(): string {
   const body = `<main class="nn-shell">
 <section class="nn-card" aria-labelledby="home-title">
-<p class="nn-brand">NativeNotes</p>
+<p class="nn-brand">${brandHtml()}</p>
 <h1 class="nn-title" id="home-title">Notes for MCP agents</h1>
 <p class="nn-subtitle">Sign in to manage workspace access for ChatGPT and other MCP clients.</p>
 <div class="nn-actions">
@@ -220,11 +221,8 @@ export function renderConsentPage(input: {
   const scopeList =
     scopes.length > 0
       ? `<ul class="nn-scope-list" aria-label="Requested access">${scopes
-        .map(
-          (scope) =>
-            `<li><span>${escapeHtml(scope.label)}</span></li>`,
-        )
-        .join("")}</ul>
+          .map((scope) => `<li><span>${escapeHtml(scope.label)}</span></li>`)
+          .join("")}</ul>
 <details class="nn-scope-detail">
 <summary>Technical scope details</summary>
 <p><code>${escapeHtml(scopes.map((scope) => scope.scope).join(" "))}</code></p>
@@ -235,7 +233,7 @@ export function renderConsentPage(input: {
     const suggested = suggestedWorkspaceName(input.userName);
     const body = `<main class="nn-shell nn-shell--top">
 <section class="nn-card nn-card--wide" aria-labelledby="consent-title">
-<p class="nn-brand">NativeNotes</p>
+<p class="nn-brand">${brandHtml()}</p>
 <h1 class="nn-title" id="consent-title">${escapeHtml(clientName)} wants to connect to NativeNotes</h1>
 <p class="nn-subtitle">Create a workspace to bind this connection. Access stays limited to the workspace you choose.</p>
 ${messageHtml}
@@ -280,7 +278,7 @@ ${hiddenOAuthQuery(input.oauthQuery)}
 
   const body = `<main class="nn-shell nn-shell--top">
 <section class="nn-card nn-card--wide" aria-labelledby="consent-title">
-<p class="nn-brand">NativeNotes</p>
+<p class="nn-brand">${brandHtml()}</p>
 <h1 class="nn-title" id="consent-title">${escapeHtml(clientName)} wants to connect to NativeNotes</h1>
 <p class="nn-subtitle">Choose the workspace this connection can access.</p>
 ${messageHtml}
@@ -334,7 +332,7 @@ export function renderSimpleStatusPage(input: {
 }): string {
   const body = `<main class="nn-shell">
 <section class="nn-card" aria-labelledby="status-title">
-<p class="nn-brand">NativeNotes</p>
+<p class="nn-brand">${brandHtml()}</p>
 <h1 class="nn-title" id="status-title">${escapeHtml(input.title)}</h1>
 ${alertHtml(input.message, input.statusTone ?? "info")}
 <p class="nn-footer"><a href="/sign-in">Back to sign in</a></p>
