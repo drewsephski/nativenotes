@@ -25,6 +25,8 @@
     "@better-auth/oauth-provider": "1.7.6",
     "@modelcontextprotocol/node": "2.1.0",
     "@modelcontextprotocol/server": "2.1.0",
+    "@neon/config": "^1.8.2",
+    "@neon/env": "^1.4.7",
     "better-auth": "1.7.6",
     "dotenv": "17.2.2",
     "drizzle-orm": "0.45.3",
