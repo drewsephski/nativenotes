@@ -5,7 +5,12 @@ import { mcp } from "@better-auth/mcp";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { jwt, organization } from "better-auth/plugins";
 
-import { env, betterAuthIssuer } from "../config/env.js";
+import {
+  betterAuthIssuer,
+  env,
+  trustedOrigins,
+  useSecureCookies,
+} from "../config/env.js";
 import { combinedSchema, db } from "../db/client.js";
 import {
   organizationConsentReferenceId,
@@ -25,7 +30,11 @@ export const auth = betterAuth({
   basePath: "/api/auth",
   secret: env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(db, { provider: "pg", schema: combinedSchema }),
-  trustedOrigins: [env.BETTER_AUTH_URL],
+  trustedOrigins,
+  advanced: {
+    // Secure cookies whenever the configured origin is HTTPS (production or tunnel).
+    useSecureCookies,
+  },
   emailAndPassword: {
     enabled: true,
   },

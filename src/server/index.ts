@@ -1,5 +1,4 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { pathToFileURL } from "node:url";
 
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { toNodeHandler as toAuthNodeHandler } from "better-auth/node";
@@ -93,6 +92,7 @@ export function createNativeNotesRequestListener() {
   };
 }
 
+/** Test / harness helper. Production and `pnpm dev` use root `server.ts`. */
 export function startNativeNotesServer(port = env.PORT) {
   const server = createServer(createNativeNotesRequestListener());
   return new Promise<{
@@ -110,12 +110,4 @@ export function startNativeNotesServer(port = env.PORT) {
       resolve({ server, port: resolvedPort, baseUrl });
     });
   });
-}
-
-const isDirectRun =
-  typeof process.argv[1] === "string" &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (isDirectRun) {
-  void startNativeNotesServer();
 }

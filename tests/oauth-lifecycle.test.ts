@@ -3,8 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const TEST_PORT = "3310";
 const TEST_BASE = `http://127.0.0.1:${TEST_PORT}`;
 
-process.env.DATABASE_URL =
-  "postgresql://postgres:postgres@127.0.0.1:55432/nativenotes";
+// DATABASE_URL is bound to TEST_DATABASE_URL in tests/setup.ts.
 process.env.BETTER_AUTH_SECRET =
   "local-development-secret-that-is-long-enough-123456";
 process.env.BETTER_AUTH_URL = TEST_BASE;

@@ -180,6 +180,12 @@ CIMD uses Better Auth's MCP 2026-07-28 profile and the package's Node SSRF-prote
 - Organization plugin APIs are available at runtime, but the current TypeScript inference does not expose all organization/OAuth consent endpoints on `auth.api`; the custom consent route uses a narrow structural type at that boundary and still performs the runtime membership check.
 - `auth.api.oauth2Consent` cannot complete authorize continuation without an HTTP `Request`; use `auth.handler`.
 
+## Deployment-related auth notes
+
+Production/runtime hosting is Neon + Vercel Node (`server.ts`). Auth behavior is unchanged: same Better Auth plugins, issuer (`{BETTER_AUTH_URL}/api/auth`), canonical `MCP_RESOURCE_URL`, CIMD Node fetch, and organization grant binding. Production hardens cookies (`useSecureCookies` when HTTPS / `NODE_ENV=production`) and requires HTTPS origins. See `docs/DEPLOYMENT.md`.
+
+Local OAuth lifecycle tests still seed a DB OAuth client because CIMD rejects loopback metadata hosts. Production clients should use public CIMD URLs.
+
 ## End-to-end OAuth proof
 
 Harness: `tests/oauth-lifecycle.test.ts` + `tests/oauth-harness.ts`, run with `pnpm test:oauth`.
@@ -188,7 +194,7 @@ Client strategy: direct HTTP + PKCE (no Playwright). Email/password creates a re
 
 ### Exact test flow
 
-1. Migrate local Postgres (`nativenotes` DB on `127.0.0.1:55432`).
+1. Migrate the Neon **test** branch pointed to by `TEST_DATABASE_URL`.
 2. Start NativeNotes on `http://127.0.0.1:3310`.
 3. Sign up a disposable user; create Organization A and Organization B; insert Note A / Note B.
 4. Authorization-code + PKCE S256 against `/api/auth/oauth2/authorize` with `resource=MCP_RESOURCE_URL`.
@@ -262,10 +268,10 @@ For A and B, distinct rows matched user, OAuth client, organization, resource, s
 
 ## Current proof and remaining risks
 
-Automated unit/integration tests cover transport boundaries, grant identity, membership checks, and tenant-scoped listing. `pnpm test:oauth` proves the interactive authorization-code + PKCE lifecycle against local Postgres, including A/B independent grants, active-org drift, membership revocation, and refresh reuse.
+Automated unit/integration tests cover transport boundaries, grant identity, membership checks, and tenant-scoped listing. `pnpm test:oauth` proves the interactive authorization-code + PKCE lifecycle against the Neon test database (`TEST_DATABASE_URL`), including A/B independent grants, active-org drift, membership revocation, and refresh reuse.
 
 Remaining risks:
 
-- CIMD clients still need a non-loopback metadata URL for production-like client discovery.
+- CIMD clients need a public (non-loopback) metadata URL; production uses `@better-auth/cimd/node` to fetch those safely.
 - Authorization-code `referenceId` is only inspectable before code exchange.
 - Auth failure responses intentionally return machine-readable JSON without stack traces; operators should rely on server logs for unexpected failures.
