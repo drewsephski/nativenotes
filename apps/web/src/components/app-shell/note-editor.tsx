@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { EmptyState } from "@/components/app-shell/empty-state";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,8 @@ function NoteEditorView({
   onNoteSaved?: (note: Note) => void;
   onReloadLatest?: (noteId: string) => Promise<NoteListItem | null>;
 }) {
+  // Remount via key={note.id} resets this draft when switching notes
+  // (unsaved changes are discarded — intentional for this task).
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(note.body);
   const [version, setVersion] = useState(note.version);
@@ -69,18 +71,6 @@ function NoteEditorView({
   const [baselineBody, setBaselineBody] = useState(note.body);
   const [status, setStatus] = useState<SaveStatus>("saved");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Switching notes discards the local draft and resets to the selected note.
-  useEffect(() => {
-    setTitle(note.title);
-    setBody(note.body);
-    setVersion(note.version);
-    setUpdatedAt(note.updatedAt);
-    setBaselineTitle(note.title);
-    setBaselineBody(note.body);
-    setStatus("saved");
-    setErrorMessage(null);
-  }, [note.id]);
 
   const isDirty = title !== baselineTitle || body !== baselineBody;
   const displayStatus: SaveStatus =
