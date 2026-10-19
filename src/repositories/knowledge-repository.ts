@@ -16,6 +16,7 @@ import {
   notes,
   noteTags,
   noteRevisions,
+  noteProposals,
   tags,
   type Note,
 } from "../db/schema.js";
@@ -202,9 +203,25 @@ export async function history(tenantId: string, noteId: string) {
       body: noteRevisions.body,
       summary: noteRevisions.summary,
       authorUserId: noteRevisions.authorUserId,
+      proposal: {
+        id: noteProposals.id,
+        proposedByUserId: noteProposals.proposedByUserId,
+        oauthClientId: noteProposals.oauthClientId,
+        source: noteProposals.source,
+        reviewedByUserId: noteProposals.reviewedByUserId,
+      },
       createdAt: noteRevisions.createdAt,
     })
     .from(noteRevisions)
+    .leftJoin(
+      noteProposals,
+      and(
+        eq(noteProposals.tenantId, noteRevisions.tenantId),
+        eq(noteProposals.noteId, noteRevisions.noteId),
+        eq(noteProposals.appliedVersion, noteRevisions.version),
+        eq(noteProposals.status, "accepted"),
+      ),
+    )
     .where(
       and(
         eq(noteRevisions.tenantId, tenantId),

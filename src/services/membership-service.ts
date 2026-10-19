@@ -33,3 +33,9 @@ export async function getCurrentMembership(
 
   return member;
 }
+
+/** Review authority is independent of ordinary workspace membership. */
+export function canReviewProposals(role: string | string[] | undefined) {
+  const roles = Array.isArray(role) ? role : (role ?? "").split(",");
+  return roles.some((value) => ["owner", "admin"].includes(value.trim()));
+}

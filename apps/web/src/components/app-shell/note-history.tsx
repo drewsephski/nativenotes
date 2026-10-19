@@ -62,6 +62,41 @@ export function NoteHistory({
                   {selected.summary}
                 </p>
               )}
+              <dl className="mb-4 space-y-1 break-words text-xs text-muted-foreground">
+                {selected.proposal ? (
+                  <>
+                    <div>
+                      <dt className="font-medium">Proposed by</dt>
+                      <dd>{selected.proposal.proposedByUserId}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium">OAuth client</dt>
+                      <dd>
+                        {selected.proposal.oauthClientId ?? "Not recorded"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium">
+                        Source (submitted by proposer)
+                      </dt>
+                      <dd>{selected.proposal.source}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium">Reviewed by</dt>
+                      <dd>{selected.proposal.reviewedByUserId}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium">Proposal</dt>
+                      <dd>{selected.proposal.id}</dd>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <dt className="font-medium">Saved by</dt>
+                    <dd>{selected.authorUserId ?? "Not recorded"}</dd>
+                  </div>
+                )}
+              </dl>
               <MarkdownBody body={selected.body} />
               <Button
                 className="mt-6"

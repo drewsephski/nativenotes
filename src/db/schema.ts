@@ -240,6 +240,8 @@ export const noteProposals = pgTable(
     title: text("title").notNull(),
     body: text("body").notNull(),
     summary: text("summary"),
+    requestKey: text("request_key"),
+    requestHash: text("request_hash"),
     reason: text("reason").notNull(),
     source: text("source").notNull(),
     proposedByUserId: text("proposed_by_user_id").notNull(),
@@ -255,6 +257,16 @@ export const noteProposals = pgTable(
       .defaultNow(),
   },
   (t) => [
+    uniqueIndex("note_proposals_request_unique").on(
+      t.tenantId,
+      t.noteId,
+      t.requestKey,
+    ),
+    uniqueIndex("note_proposals_applied_unique").on(
+      t.tenantId,
+      t.noteId,
+      t.appliedVersion,
+    ),
     index("note_proposals_note_idx").on(t.tenantId, t.noteId, t.createdAt),
     foreignKey({
       columns: [t.tenantId, t.noteId],

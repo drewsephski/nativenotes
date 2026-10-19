@@ -23,7 +23,7 @@ import {
 
 export const mcpMutationDescriptions = {
   "note.proposeUpdate":
-    "Propose replacement content for human review without changing the note. Supply the current expectedVersion, reason and source reference. Source is agent-provided, not independently verified. Review the diff in the NativeNotes web app; MCP cannot accept or reject proposals.",
+    "Propose replacement content for human review without changing the note. Supply the current expectedVersion, reason and source reference. Reuse an idempotencyKey for retries; changed payloads with the same key fail. Identical requests without a key are deduplicated. At most 20 pending proposals per note. Source is agent-provided, not independently verified. Review the diff in the NativeNotes web app; MCP cannot accept or reject proposals.",
   "note.create":
     "Create a Markdown note in the authorized workspace Inbox. Returns its initial version. This writes persistent content.",
   "note.update":
@@ -51,17 +51,25 @@ export const mcpMutationDescriptions = {
 } satisfies Partial<Record<ProductCommand, string>>;
 export type McpMutation = keyof typeof mcpMutationDescriptions;
 export function requiredMutationScope(name: McpMutation) {
-  return name === "instructions.set" ? "mcp:instructions" : "mcp:write";
+  return name === "instructions.set"
+    ? "mcp:instructions"
+    : name === "note.proposeUpdate"
+      ? "mcp:propose"
+      : "mcp:write";
+}
+
+function hasMutationScope(context: AuthContext, name: McpMutation) {
+  return (
+    context.scopes.includes(requiredMutationScope(name)) ||
+    (name === "note.proposeUpdate" && context.scopes.includes("mcp:write"))
+  );
 }
 export async function executeMcpMutation(
   context: AuthContext,
   name: McpMutation,
   input: unknown,
 ) {
-  if (
-    !context.scopes.includes("mcp:read") ||
-    !context.scopes.includes(requiredMutationScope(name))
-  )
+  if (!context.scopes.includes("mcp:read") || !hasMutationScope(context, name))
     throw new ForbiddenError(
       "This tool requires " + requiredMutationScope(name),
     );
@@ -174,7 +182,7 @@ export function registerProductTools(server: McpServer, context: AuthContext) {
       ),
   );
   for (const name of Object.keys(mcpMutationDescriptions) as McpMutation[]) {
-    if (!context.scopes.includes(requiredMutationScope(name))) continue;
+    if (!hasMutationScope(context, name)) continue;
     server.registerTool(
       name,
       {

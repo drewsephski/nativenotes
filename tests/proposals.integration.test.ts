@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "../src/db/client.js";
-import { notes, type noteProposals, noteRevisions } from "../src/db/schema.js";
+import { notes, noteProposals, noteRevisions } from "../src/db/schema.js";
 import { noteRepository } from "../src/repositories/note-repository.js";
 import {
   getNote,
@@ -95,12 +95,140 @@ describe("agent proposal loop", { timeout: 30_000 }, () => {
       summary: "Keep summary",
     });
     expect(await history(tenant, note.id)).toMatchObject([
-      { version: 2, authorUserId: "reviewer" },
+      {
+        version: 2,
+        authorUserId: "reviewer",
+        proposal: {
+          id: proposal.id,
+          proposedByUserId: "agent-user",
+          oauthClientId: actor.oauthClientId,
+          source: proposal.source,
+          reviewedByUserId: "reviewer",
+        },
+      },
       { version: 1, body: "original" },
     ]);
     await expect(
       reviewProposal(tenant, "reviewer", proposal.id, true),
     ).rejects.toMatchObject({ code: "proposal_reviewed" });
+  });
+  it("deduplicates concurrent retries, rejects changed keyed payloads and returns accepted results", async () => {
+    const { note } = await fixture();
+    const input = {
+      id: note.id,
+      expectedVersion: 1,
+      title: "Retry",
+      body: "body",
+      reason: "reason",
+      source: "source",
+      idempotencyKey: "retry-key",
+    };
+    const submit = (raw = input) =>
+      executeProductCommand(
+        tenant,
+        "agent-user",
+        "note.proposeUpdate",
+        raw,
+        actor,
+      ) as Promise<typeof noteProposals.$inferSelect>;
+    const results = await Promise.all([submit(), submit()]);
+    expect(results[0].id).toBe(results[1].id);
+    await expect(submit({ ...input, body: "different" })).rejects.toMatchObject(
+      { code: "idempotency_conflict" },
+    );
+    await reviewProposal(tenant, "reviewer", results[0].id, true);
+    expect(await submit()).toMatchObject({
+      id: results[0].id,
+      status: "accepted",
+    });
+  });
+  it("deduplicates unkeyed requests and isolates request keys by verified client", async () => {
+    const { note } = await fixture();
+    const input = {
+      id: note.id,
+      expectedVersion: 1,
+      title: "Repeat",
+      body: "body",
+      reason: "reason",
+      source: "source",
+    };
+    const submit = (client = actor) =>
+      executeProductCommand(
+        tenant,
+        "agent-user",
+        "note.proposeUpdate",
+        input,
+        client,
+      ) as Promise<typeof noteProposals.$inferSelect>;
+    const first = await submit();
+    expect((await submit()).id).toBe(first.id);
+    expect(
+      (await submit({ ...actor, oauthClientId: "other-client" })).id,
+    ).not.toBe(first.id);
+  });
+  it("limits pending proposals and expires acceptance after 30 days while retaining audit records", async () => {
+    const { note, proposal } = await fixture();
+    const input = {
+      id: note.id,
+      expectedVersion: 1,
+      title: "Limit",
+      body: "body",
+      reason: "reason",
+      source: "source",
+    };
+    for (let i = 0; i < 19; i++)
+      await executeProductCommand(
+        tenant,
+        "agent-user",
+        "note.proposeUpdate",
+        { ...input, idempotencyKey: String(i) },
+        actor,
+      );
+    await expect(
+      executeProductCommand(
+        tenant,
+        "agent-user",
+        "note.proposeUpdate",
+        { ...input, idempotencyKey: "overflow" },
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: "proposal_limit" });
+    await db
+      .update(noteProposals)
+      .set({ createdAt: new Date(Date.now() - 31 * 86400_000) })
+      .where(eq(noteProposals.id, proposal.id));
+    await expect(
+      reviewProposal(tenant, "reviewer", proposal.id, true),
+    ).rejects.toMatchObject({ code: "proposal_expired" });
+    await expect(
+      executeProductCommand(
+        tenant,
+        "agent-user",
+        "note.proposeUpdate",
+        { ...input, idempotencyKey: "overflow" },
+        actor,
+      ),
+    ).resolves.toMatchObject({ status: "pending" });
+    expect(await getProposal(tenant, proposal.id)).toMatchObject({
+      status: "pending",
+    });
+  });
+  it("requires explicit human review authority at command dispatch", async () => {
+    const { proposal } = await fixture();
+    for (const command of ["proposal.accept", "proposal.reject"] as const) {
+      await expect(
+        executeProductCommand(tenant, "member", command, { id: proposal.id }),
+      ).rejects.toMatchObject({ status: 403 });
+    }
+    await expect(
+      executeProductCommand(
+        tenant,
+        "admin",
+        "proposal.reject",
+        { id: proposal.id },
+        { kind: "web", canReviewProposals: true },
+      ),
+    ).resolves.toMatchObject({ status: "rejected" });
   });
   it("isolates proposal lookup, listing, creation and review across tenants", async () => {
     const { note, proposal } = await fixture();

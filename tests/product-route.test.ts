@@ -71,6 +71,7 @@ describe("workspace transport authority", () => {
       "user-a",
       "note.favorite",
       expect.any(Object),
+      { kind: "web", canReviewProposals: false },
     );
     expect(findOne).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -80,6 +81,32 @@ describe("workspace transport authority", () => {
         ],
       }),
     );
+  });
+  it("derives review authority from current roles, including combined roles", async () => {
+    for (const [role, allowed] of [
+      ["member", false],
+      ["readonly", false],
+      ["owner", true],
+      ["admin", true],
+      ["member,admin", true],
+    ] as const) {
+      findOne.mockResolvedValue({ id: "membership", role });
+      await request(
+        {},
+        {
+          command: "proposal.accept",
+          input: { id: "proposal" },
+          canReviewProposals: true,
+        },
+      );
+      expect(command).toHaveBeenLastCalledWith(
+        "org-a",
+        "user-a",
+        "proposal.accept",
+        { id: "proposal" },
+        { kind: "web", canReviewProposals: allowed },
+      );
+    }
   });
   it("rejects stale/missing workspace preconditions without invoking mutations", async () => {
     expect((await request({ "x-workspace-id": "org-b" })).data.error).toBe(

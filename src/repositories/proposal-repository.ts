@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
+import { and, count, desc, eq, gt } from "drizzle-orm";
 import type { z } from "zod";
 import { db } from "../db/client.js";
 import { noteProposals, noteRevisions, notes } from "../db/schema.js";
@@ -12,6 +12,10 @@ import {
   NoteVersionConflictError,
 } from "../domain/errors.js";
 import { updateNoteInTransaction } from "./note-repository.js";
+
+const PROPOSAL_LIFETIME_MS = 30 * 86400_000;
+const expiresAt = (createdAt: Date) =>
+  new Date(createdAt.getTime() + PROPOSAL_LIFETIME_MS);
 
 const proposalKey = (tenantId: string, id: string) =>
   and(eq(noteProposals.tenantId, tenantId), eq(noteProposals.id, id));
@@ -29,12 +33,76 @@ export async function proposeUpdate(
       .where(and(eq(notes.tenantId, tenantId), eq(notes.id, input.id)))
       .for("update");
     if (!note) throw new NoteNotFoundError();
+    // The note lock serializes retries and enforces the pending limit.
+    const requestHash = createHash("sha256")
+      .update(
+        JSON.stringify([
+          input.expectedVersion,
+          input.title,
+          input.body,
+          input.summary === undefined ? { omitted: true } : input.summary,
+          input.reason,
+          input.source,
+        ]),
+      )
+      .digest("hex");
+    const requestKey = createHash("sha256")
+      .update(
+        JSON.stringify([
+          userId,
+          oauthClientId ?? null,
+          input.idempotencyKey
+            ? ["key", input.idempotencyKey]
+            : ["payload", requestHash],
+        ]),
+      )
+      .digest("hex");
+    const [existing] = await tx
+      .select()
+      .from(noteProposals)
+      .where(
+        and(
+          eq(noteProposals.tenantId, tenantId),
+          eq(noteProposals.noteId, note.id),
+          eq(noteProposals.requestKey, requestKey),
+        ),
+      );
+    if (existing) {
+      if (existing.requestHash !== requestHash)
+        throw new ProductError(
+          "idempotency_conflict",
+          "This idempotency key was used for different content",
+          409,
+        );
+      return existing;
+    }
     if (note.version !== input.expectedVersion)
       throw new NoteVersionConflictError(note.version);
     if (note.archivedAt || note.trashedAt)
       throw new ProductError(
         "inactive_note",
         "Restore this note before proposing changes",
+        409,
+      );
+    const [pending] = await tx
+      .select({ count: count() })
+      .from(noteProposals)
+      .where(
+        and(
+          eq(noteProposals.tenantId, tenantId),
+          eq(noteProposals.noteId, note.id),
+          eq(noteProposals.status, "pending"),
+          gt(
+            noteProposals.createdAt,
+            new Date(Date.now() - PROPOSAL_LIFETIME_MS),
+          ),
+        ),
+      );
+    if (!pending) throw new Error("Pending proposal count is missing");
+    if (pending.count >= 20)
+      throw new ProductError(
+        "proposal_limit",
+        "Review pending proposals before submitting more (limit 20 per note)",
         409,
       );
     // Preserve the exact baseline even for notes created before revision history.
@@ -61,6 +129,8 @@ export async function proposeUpdate(
         title: input.title,
         body: input.body,
         summary: input.summary === undefined ? note.summary : input.summary,
+        requestKey,
+        requestHash,
         reason: input.reason,
         source: input.source,
         proposedByUserId: userId,
@@ -131,7 +201,12 @@ export async function getProposal(tenantId: string, id: string) {
       ),
     );
   if (!base) throw new Error("Proposal baseline is missing");
-  return { ...proposal, base };
+  return {
+    ...proposal,
+    base,
+    expiresAt: expiresAt(proposal.createdAt),
+    expired: expiresAt(proposal.createdAt).getTime() <= Date.now(),
+  };
 }
 
 export async function reviewProposal(
@@ -156,6 +231,12 @@ export async function reviewProposal(
       );
     let appliedVersion: number | null = null;
     if (accept) {
+      if (expiresAt(proposal.createdAt).getTime() <= Date.now())
+        throw new ProductError(
+          "proposal_expired",
+          "This proposal expired. Submit a fresh proposal after reading the note again.",
+          409,
+        );
       const [note] = await tx
         .select()
         .from(notes)

@@ -43,7 +43,7 @@ plugins: [
     appName: "NativeNotes", // via betterAuth({ appName: "NativeNotes" })
     resource: env.MCP_RESOURCE_URL,
     resources: [env.MCP_RESOURCE_URL],
-    scopes: ["openid", "offline_access", "mcp:read", "mcp:write", "mcp:instructions", "mcp:admin"],
+    scopes: ["openid", "offline_access", "mcp:read", "mcp:write", "mcp:propose", "mcp:instructions", "mcp:admin"],
     accessTokenExpiresIn: 900,
     refreshTokenExpiresIn: 2592000,
     refreshTokenReuseInterval: 30,

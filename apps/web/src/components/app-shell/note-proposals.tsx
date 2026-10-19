@@ -10,64 +10,7 @@ import {
 } from "@/lib/product-api";
 import { useAction, useProduct, useResource } from "./product-context";
 
-/** Linear-time replacement diff: unchanged edges collapse; changed lines stay visible. */
-export function ContentDiff({
-  before,
-  after,
-  label,
-}: {
-  before: string;
-  after: string;
-  label: string;
-}) {
-  const oldLines = before.split("\n");
-  const newLines = after.split("\n");
-  let start = 0;
-  while (
-    start < oldLines.length &&
-    start < newLines.length &&
-    oldLines[start] === newLines[start]
-  )
-    start++;
-  let end = 0;
-  while (
-    end < oldLines.length - start &&
-    end < newLines.length - start &&
-    oldLines[oldLines.length - 1 - end] === newLines[newLines.length - 1 - end]
-  )
-    end++;
-  return (
-    <section aria-label={`${label} diff`} className="min-w-0">
-      <h3 className="mb-2 font-medium">{label}</h3>
-      {before === after ? (
-        <p className="text-sm text-muted-foreground">Unchanged</p>
-      ) : (
-        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded border border-border p-3 font-mono text-xs leading-6">
-          {start > 0 && (
-            <span className="block text-muted-foreground">
-              … {start} unchanged lines
-            </span>
-          )}
-          {oldLines.slice(start, oldLines.length - end).map((line, i) => (
-            <span key={`old:${i}`} className="block bg-red-50 text-red-900">
-              − {line}
-            </span>
-          ))}
-          {newLines.slice(start, newLines.length - end).map((line, i) => (
-            <span key={`new:${i}`} className="block bg-green-50 text-green-900">
-              + {line}
-            </span>
-          ))}
-          {end > 0 && (
-            <span className="block text-muted-foreground">
-              … {end} unchanged lines
-            </span>
-          )}
-        </pre>
-      )}
-    </section>
-  );
-}
+import { ContentDiff } from "./content-diff";
 
 function ProposalReview({
   id,
@@ -87,6 +30,7 @@ function ProposalReview({
   const action = useAction();
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p role="status">Loading proposal…</p>;
+  const expired = data.expired === true;
   const stale = data.expectedVersion !== note.version;
   async function review(accept: boolean) {
     await mutate(accept ? "proposal.accept" : "proposal.reject", { id });
@@ -119,7 +63,7 @@ function ProposalReview({
         <div>
           <dt className="font-medium">Review status</dt>
           <dd>
-            {data.status}
+            {data.status === "pending" && expired ? "expired" : data.status}
             {data.appliedVersion
               ? ` · saved as version ${data.appliedVersion}`
               : ""}
@@ -148,21 +92,33 @@ function ProposalReview({
           {action.error}
         </p>
       )}
-      {data.status === "pending" && (
+      {data.status === "pending" && data.canReview !== true && (
+        <p className="text-sm text-muted-foreground">
+          A workspace owner or admin must review this proposal.
+        </p>
+      )}
+      {data.status === "pending" && data.canReview === true && (
         <>
-          {(stale || hasDraft || note.archivedAt || note.trashedAt) && (
+          {(expired ||
+            stale ||
+            hasDraft ||
+            note.archivedAt ||
+            note.trashedAt) && (
             <p className="text-sm text-muted-foreground">
-              {stale
-                ? "The note changed after this proposal. Ask the agent to read it again and submit a new proposal."
-                : hasDraft
-                  ? "Save or cancel your draft before accepting a proposal."
-                  : "Restore the note before accepting a proposal."}
+              {expired
+                ? "This proposal expired. Ask the agent to submit a fresh proposal."
+                : stale
+                  ? "The note changed after this proposal. Ask the agent to read it again and submit a new proposal."
+                  : hasDraft
+                    ? "Save or cancel your draft before accepting a proposal."
+                    : "Restore the note before accepting a proposal."}
             </p>
           )}
           <div className="flex flex-wrap gap-2">
             <Button
               disabled={
                 action.busy ||
+                expired ||
                 stale ||
                 hasDraft ||
                 Boolean(note.archivedAt || note.trashedAt)
@@ -215,7 +171,7 @@ export function NoteProposals({
           {!data && !error && <p role="status">Loading proposals…</p>}
           {data?.proposals.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              No proposals yet. An agent with write access can use
+              No proposals yet. An agent with proposal access can use
               note.proposeUpdate.
             </p>
           )}

@@ -1,5 +1,6 @@
 const SCOPE_LABELS: Record<string, string> = {
   "mcp:read": "Read notes",
+  "mcp:propose": "Propose note edits for review",
   "mcp:write": "Create and edit notes",
   "mcp:instructions": "Read and manage AI instructions",
   "mcp:admin": "Administrative memory actions",
