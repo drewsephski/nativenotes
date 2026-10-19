@@ -11,13 +11,19 @@ import {
 import {
   getNote,
   instructionChain,
-  queryNotes,
+  queryNoteMetadata,
 } from "../repositories/knowledge-repository.js";
 import { listFolders } from "../repositories/folder-repository.js";
 import { listTags } from "../repositories/tag-repository.js";
 import { executeProductCommand } from "../services/product-service.js";
+import {
+  getProposal,
+  listProposals,
+} from "../repositories/proposal-repository.js";
 
 export const mcpMutationDescriptions = {
+  "note.proposeUpdate":
+    "Propose replacement content for human review without changing the note. Supply the current expectedVersion, reason and source reference. Source is agent-provided, not independently verified. Review the diff in the NativeNotes web app; MCP cannot accept or reject proposals.",
   "note.create":
     "Create a Markdown note in the authorized workspace Inbox. Returns its initial version. This writes persistent content.",
   "note.update":
@@ -60,7 +66,10 @@ export async function executeMcpMutation(
       "This tool requires " + requiredMutationScope(name),
     );
   // Unknown authority fields are stripped by the command-specific schemas.
-  return executeProductCommand(context.tenantId, context.userId, name, input);
+  return executeProductCommand(context.tenantId, context.userId, name, input, {
+    kind: "mcp",
+    oauthClientId: context.oauthClientId,
+  });
 }
 export function registerProductTools(server: McpServer, context: AuthContext) {
   function read(
@@ -103,6 +112,29 @@ export function registerProductTools(server: McpServer, context: AuthContext) {
     );
   }
   read(
+    "proposal.get",
+    "Read a proposal, its exact baseline content, source, verified OAuth client attribution (when available), review status and applied version.",
+    z.object({ id: z.string().min(1).max(200) }),
+    async (input) =>
+      getProposal(
+        context.tenantId,
+        z.object({ id: z.string() }).parse(input).id,
+      ),
+  );
+  const proposalsInput = z.object({
+    noteId: z.string().min(1).max(200),
+    offset: z.number().int().min(0).max(100_000).default(0),
+  });
+  read(
+    "proposal.list",
+    "List 20 proposal metadata records for one note, newest first. Use proposal.get for content and baseline. Supports offset pagination.",
+    proposalsInput,
+    async (input) => {
+      const { noteId, offset } = proposalsInput.parse(input);
+      return listProposals(context.tenantId, noteId, offset);
+    },
+  );
+  read(
     "note.get",
     "Read one note with folder, tags, summary, lifecycle, freshness and optimistic content version.",
     z.object({ id: z.string().min(1) }),
@@ -111,10 +143,10 @@ export function registerProductTools(server: McpServer, context: AuthContext) {
   );
   read(
     "note.search",
-    "Lexical search of active notes by title, body, summary, folder and tags. Supports lifecycle filters and 100-note pages; no embeddings.",
+    "Lexical search of active notes by title, body, summary, folder and tags. Returns metadata without bodies; use note.get to read content. Supports lifecycle filters, offset pagination and 100-note pages; no embeddings.",
     noteFilter,
     async (input: unknown) =>
-      queryNotes(context.tenantId, noteFilter.parse(input)),
+      queryNoteMetadata(context.tenantId, noteFilter.parse(input)),
   );
   read(
     "folder.list",

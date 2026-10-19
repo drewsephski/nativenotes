@@ -35,6 +35,7 @@ import {
 import { MarkdownBody } from "./markdown";
 import { NoteInspector } from "./note-inspector";
 import { NoteHistory } from "./note-history";
+import { NoteProposals } from "./note-proposals";
 const draftOf = (note: ProductNote): NoteDraft => ({
   title: note.title,
   body: note.body,
@@ -87,6 +88,7 @@ export function DocumentView({ initialNote }: { initialNote: ProductNote }) {
   const [draftStored, setDraftStored] = useState(true);
   const [conflict, setConflict] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [proposalsOpen, setProposalsOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const action = useAction();
   function receiveNote(next: ProductNote) {
@@ -291,6 +293,14 @@ export function DocumentView({ initialNote }: { initialNote: ProductNote }) {
               >
                 History
               </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setProposalsOpen(true)}
+              >
+                Agent changes
+              </Button>
             </div>
             {action.error && (
               <p role="alert" className="mb-4 text-sm text-destructive">
@@ -457,6 +467,14 @@ export function DocumentView({ initialNote }: { initialNote: ProductNote }) {
             setNote(restored);
             setDraft(draftOf(restored));
           }}
+        />
+      )}
+      {proposalsOpen && (
+        <NoteProposals
+          note={note}
+          hasDraft={editing}
+          onClose={() => setProposalsOpen(false)}
+          onApplied={receiveNote}
         />
       )}
     </div>

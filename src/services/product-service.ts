@@ -4,6 +4,11 @@ import {
   type ProductCommand,
 } from "../domain/product-inputs.js";
 import { createNoteForTenant, updateNoteForTenant } from "./note-service.js";
+import {
+  proposeUpdate,
+  reviewProposal,
+} from "../repositories/proposal-repository.js";
+import { ForbiddenError } from "../domain/errors.js";
 import { saveFolder } from "../repositories/folder-repository.js";
 import {
   saveTag,
@@ -24,8 +29,28 @@ export async function executeProductCommand(
   userId: string,
   command: ProductCommand,
   raw: unknown,
+  actor: { kind: "web" | "mcp"; oauthClientId?: string } = { kind: "web" },
 ) {
   switch (command) {
+    case "note.proposeUpdate":
+      return proposeUpdate(
+        tenantId,
+        userId,
+        productCommands[command].parse(raw),
+        actor.oauthClientId,
+      );
+    case "proposal.accept":
+    case "proposal.reject": {
+      if (actor.kind !== "web")
+        throw new ForbiddenError("Review requires a signed-in human session");
+      const { id } = productCommands[command].parse(raw);
+      return reviewProposal(
+        tenantId,
+        userId,
+        id,
+        command === "proposal.accept",
+      );
+    }
     case "note.create": {
       const input = productCommands[command].parse(raw);
       const note = await createNoteForTenant({

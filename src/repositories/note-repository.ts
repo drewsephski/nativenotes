@@ -71,43 +71,7 @@ export const noteRepository: NoteRepository = {
 
   async update(input) {
     return db.transaction(async (tx) => {
-      const [prior] = await tx
-        .select()
-        .from(notes)
-        .where(
-          and(eq(notes.tenantId, input.tenantId), eq(notes.id, input.noteId)),
-        )
-        .for("update");
-      if (!prior || prior.version !== input.expectedVersion) return null;
-      // Seed the baseline for notes that predate revision history.
-      await tx
-        .insert(noteRevisions)
-        .values(snapshot(prior))
-        .onConflictDoNothing();
-      const [updated] = await tx
-        .update(notes)
-        .set({
-          title: input.title,
-          body: input.body,
-          ...(input.summary !== undefined ? { summary: input.summary } : {}),
-          updatedAt: sql`now()`,
-          version: sql`${notes.version} + 1`,
-          freshness: "needs_review",
-          verifiedAt: null,
-        })
-        .where(
-          and(
-            eq(notes.tenantId, input.tenantId),
-            eq(notes.id, input.noteId),
-            eq(notes.version, input.expectedVersion),
-          ),
-        )
-        .returning();
-      if (!updated) throw new Error("Locked note update failed");
-      await tx
-        .insert(noteRevisions)
-        .values(snapshot(updated, input.authorUserId));
-      return updated;
+      return updateNoteInTransaction(tx, input);
     });
   },
 
@@ -120,6 +84,47 @@ export const noteRepository: NoteRepository = {
     return rows[0] ?? null;
   },
 };
+
+export type NoteTransaction = Parameters<
+  Parameters<typeof db.transaction>[0]
+>[0];
+
+/** Shared by direct edits and proposal acceptance so snapshots commit atomically. */
+export async function updateNoteInTransaction(
+  tx: NoteTransaction,
+  input: UpdateNoteInput,
+) {
+  const [prior] = await tx
+    .select()
+    .from(notes)
+    .where(and(eq(notes.tenantId, input.tenantId), eq(notes.id, input.noteId)))
+    .for("update");
+  if (!prior || prior.version !== input.expectedVersion) return null;
+  // Seed the baseline for notes that predate revision history.
+  await tx.insert(noteRevisions).values(snapshot(prior)).onConflictDoNothing();
+  const [updated] = await tx
+    .update(notes)
+    .set({
+      title: input.title,
+      body: input.body,
+      ...(input.summary !== undefined ? { summary: input.summary } : {}),
+      updatedAt: sql`now()`,
+      version: sql`${notes.version} + 1`,
+      freshness: "needs_review",
+      verifiedAt: null,
+    })
+    .where(
+      and(
+        eq(notes.tenantId, input.tenantId),
+        eq(notes.id, input.noteId),
+        eq(notes.version, input.expectedVersion),
+      ),
+    )
+    .returning();
+  if (!updated) throw new Error("Locked note update failed");
+  await tx.insert(noteRevisions).values(snapshot(updated, input.authorUserId));
+  return updated;
+}
 
 function snapshot(note: Note, authorUserId?: string) {
   return {

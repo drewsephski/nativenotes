@@ -29,5 +29,13 @@ export async function buildAuthContext(
       ? membership.role
       : [membership.role ?? "member"]);
 
-  return { userId, tenantId, scopes, roles };
+  return {
+    userId,
+    tenantId,
+    scopes,
+    roles,
+    ...(stringClaim(payload, "client_id")
+      ? { oauthClientId: stringClaim(payload, "client_id") }
+      : {}),
+  };
 }

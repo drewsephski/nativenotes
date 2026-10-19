@@ -26,6 +26,9 @@ describe("MCP product authorization", () => {
     await expect(
       executeMcpMutation(context, "instructions.set", { instructions: "A" }),
     ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      executeMcpMutation(context, "note.proposeUpdate", {}),
+    ).rejects.toMatchObject({ status: 403 });
     expect(execute).not.toHaveBeenCalled();
   });
   it("keeps instruction and general mutation scopes separate", async () => {
@@ -56,6 +59,7 @@ describe("MCP product authorization", () => {
       "user-a",
       "note.favorite",
       expect.any(Object),
+      { kind: "mcp", oauthClientId: undefined },
     );
   });
   it("only advertises granted mutations and requires expectedVersion for updates", () => {
@@ -63,6 +67,8 @@ describe("MCP product authorization", () => {
     const register = vi.spyOn(server, "registerTool");
     registerProductTools(server, context);
     expect(register.mock.calls.map((c) => c[0])).toEqual([
+      "proposal.get",
+      "proposal.list",
       "note.get",
       "note.search",
       "folder.list",
@@ -75,6 +81,15 @@ describe("MCP product authorization", () => {
       ...context,
       scopes: ["mcp:read", "mcp:write", "mcp:instructions"],
     });
+    expect(writeRegister.mock.calls.map((c) => c[0])).toContain(
+      "note.proposeUpdate",
+    );
+    expect(writeRegister.mock.calls.map((c) => c[0])).not.toContain(
+      "proposal.accept",
+    );
+    expect(writeRegister.mock.calls.map((c) => c[0])).not.toContain(
+      "proposal.reject",
+    );
     const update = writeRegister.mock.calls.find(
       (c) => c[0] === "note.update",
     )!;

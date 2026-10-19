@@ -89,3 +89,24 @@ export async function productRequest<T>(
     );
   return data as T;
 }
+
+export type ProposalMetadata = {
+  id: string;
+  noteId: string;
+  expectedVersion: number;
+  title: string;
+  reason: string;
+  source: string;
+  proposedByUserId: string;
+  oauthClientId: string | null;
+  status: "pending" | "accepted" | "rejected";
+  createdAt: string;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  appliedVersion: number | null;
+};
+export type NoteProposal = ProposalMetadata & {
+  body: string;
+  summary: string | null;
+  base: { title: string; body: string; summary: string | null };
+};

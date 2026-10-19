@@ -228,3 +228,52 @@ export const noteRevisions = pgTable(
     }).onDelete("cascade"),
   ],
 );
+
+// Proposed content is immutable; review changes only its disposition.
+export const noteProposals = pgTable(
+  "note_proposals",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    noteId: text("note_id").notNull(),
+    expectedVersion: integer("expected_version").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    summary: text("summary"),
+    reason: text("reason").notNull(),
+    source: text("source").notNull(),
+    proposedByUserId: text("proposed_by_user_id").notNull(),
+    oauthClientId: text("oauth_client_id"),
+    status: text("status", { enum: ["pending", "accepted", "rejected"] })
+      .notNull()
+      .default("pending"),
+    reviewedByUserId: text("reviewed_by_user_id"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    appliedVersion: integer("applied_version"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("note_proposals_note_idx").on(t.tenantId, t.noteId, t.createdAt),
+    foreignKey({
+      columns: [t.tenantId, t.noteId],
+      foreignColumns: [notes.tenantId, notes.id],
+    }).onDelete("cascade"),
+    check("note_proposals_version_check", sql`${t.expectedVersion} > 0`),
+    check(
+      "note_proposals_status_check",
+      sql`${t.status} IN ('pending', 'accepted', 'rejected')`,
+    ),
+    check(
+      "note_proposals_review_check",
+      sql`(
+      ${t.status} = 'pending' AND ${t.reviewedByUserId} IS NULL AND ${t.reviewedAt} IS NULL AND ${t.appliedVersion} IS NULL
+    ) OR (
+      ${t.status} IN ('accepted', 'rejected') AND ${t.reviewedByUserId} IS NOT NULL AND ${t.reviewedAt} IS NOT NULL
+      AND ((${t.status} = 'accepted' AND ${t.appliedVersion} = ${t.expectedVersion} + 1 AND ${t.appliedVersion} IS NOT NULL)
+        OR (${t.status} = 'rejected' AND ${t.appliedVersion} IS NULL))
+    )`,
+    ),
+  ],
+);

@@ -22,6 +22,11 @@ import {
 } from "../repositories/knowledge-repository.js";
 import { wikiGraph } from "../services/wiki-service.js";
 import { isTrustedMutationOrigin } from "./request-origin.js";
+import {
+  getProposal,
+  listProposals,
+} from "../repositories/proposal-repository.js";
+import { z } from "zod";
 
 function json(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, {
@@ -102,6 +107,27 @@ export async function handleProductRoute(
       return;
     }
     switch (resource) {
+      case "proposals": {
+        const offset = z.coerce
+          .number()
+          .int()
+          .min(0)
+          .max(100_000)
+          .parse(params.get("offset") ?? 0);
+        json(
+          response,
+          200,
+          await listProposals(tenantId, params.get("noteId") ?? "", offset),
+        );
+        break;
+      }
+      case "proposal":
+        json(
+          response,
+          200,
+          await getProposal(tenantId, params.get("id") ?? ""),
+        );
+        break;
       case "navigation":
         json(response, 200, {
           ...(await navigation(tenantId)),

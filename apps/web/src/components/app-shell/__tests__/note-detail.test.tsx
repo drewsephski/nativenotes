@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { ProductProvider } from "../product-context";
 import { NoteDetail } from "../note-detail";
 import { MarkdownBody } from "../markdown";
-import type { ProductNote } from "@/lib/product-api";
+import type { NoteProposal, ProductNote } from "@/lib/product-api";
 vi.mock("@/lib/auth-client", () => ({
   useSession: () => ({ data: { user: { id: "user-a" } } }),
   useActiveOrganization: () => ({
@@ -16,6 +16,7 @@ vi.mock("@/lib/auth-client", () => ({
 }));
 let note: ProductNote;
 let conflict = false;
+let proposal: NoteProposal;
 const fetchMock = vi.fn();
 function mount() {
   return render(
@@ -46,10 +47,45 @@ beforeEach(() => {
     purgeAfter: null,
     tags: [],
   };
+  proposal = {
+    id: "proposal-a",
+    noteId: "a",
+    title: "Reviewed agent title",
+    body: "Agent proposed body",
+    summary: "Agent summary",
+    base: { title: note.title, body: note.body, summary: note.summary },
+    expectedVersion: 1,
+    reason: "Record verified deployment",
+    source: "repo/commit/abc123",
+    oauthClientId: "https://agent.example/client.json",
+    proposedByUserId: "agent-user",
+    status: "pending",
+    reviewedByUserId: null,
+    reviewedAt: null,
+    appliedVersion: null,
+    createdAt: note.createdAt,
+  };
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockImplementation(async (url: URL, init?: RequestInit) => {
     if (init?.method === "POST") {
       const { command, input } = JSON.parse(init.body as string);
+      if (command === "proposal.accept" || command === "proposal.reject") {
+        proposal = {
+          ...proposal,
+          status: command === "proposal.accept" ? "accepted" : "rejected",
+          reviewedByUserId: "user-a",
+          appliedVersion: command === "proposal.accept" ? 2 : null,
+        };
+        if (command === "proposal.accept")
+          note = {
+            ...note,
+            title: proposal.title,
+            body: proposal.body,
+            summary: proposal.summary,
+            version: 2,
+          };
+        return Response.json(proposal);
+      }
       if (command === "note.update") {
         if (conflict)
           return Response.json(
@@ -102,6 +138,9 @@ beforeEach(() => {
         ],
         edges: [{ source: "related", target: "a", title: note.title }],
       });
+    if (url.pathname.endsWith("proposals"))
+      return Response.json({ proposals: [proposal], hasMore: false });
+    if (url.pathname.endsWith("proposal")) return Response.json(proposal);
     if (url.pathname.endsWith("history"))
       return Response.json({
         revisions: [
@@ -261,6 +300,80 @@ describe("document interactions", () => {
     );
     expect(screen.getByText("Historical body")).toBeInTheDocument();
     expect(note.version).toBe(2);
+  });
+  it("reviews source and diffs, accepts a proposal and displays the saved content", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(
+      await screen.findByRole("button", { name: "Agent changes" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Reviewed agent title/ }),
+    );
+    expect(await screen.findByText("repo/commit/abc123")).toBeInTheDocument();
+    expect(
+      screen.getByText("https://agent.example/client.json"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Content diff" }),
+    ).toHaveTextContent("+ Agent proposed body");
+    await user.click(screen.getByRole("button", { name: "Accept and save" }));
+    await screen.findByText("accepted · saved as version 2");
+    await user.keyboard("{Escape}");
+    expect(
+      screen.getByRole("heading", { name: "Reviewed agent title" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Agent proposed body")).toBeInTheDocument();
+    expect(note.version).toBe(2);
+  });
+  it("disables acceptance for stale proposals and rejects without changing content", async () => {
+    const user = userEvent.setup();
+    note = { ...note, version: 2, body: "A newer human edit" };
+    mount();
+    await user.click(
+      await screen.findByRole("button", { name: "Agent changes" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Reviewed agent title/ }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Accept and save" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/The note changed after this proposal/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reject proposal" }));
+    await screen.findByText("rejected");
+    expect(note.body).toBe("A newer human edit");
+    expect(
+      fetchMock.mock.calls.some(([, init]) =>
+        init?.body?.includes('"proposal.accept"'),
+      ),
+    ).toBe(false);
+  });
+  it("protects an open draft from proposal acceptance", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Note content" }),
+      " local draft",
+    );
+    await user.click(screen.getByRole("button", { name: "Agent changes" }));
+    await user.click(
+      await screen.findByRole("button", { name: /Reviewed agent title/ }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Accept and save" }),
+    ).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "Note content",
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toContain("local draft");
   });
   it("provides the inspector as a keyboard-dismissable sheet", async () => {
     const user = userEvent.setup();

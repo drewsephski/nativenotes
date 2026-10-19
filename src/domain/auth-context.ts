@@ -3,4 +3,5 @@ export type AuthContext = {
   tenantId: string;
   scopes: string[];
   roles: string[];
+  oauthClientId?: string;
 };

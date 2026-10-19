@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  getTableColumns,
+  isNotNull,
+  isNull,
+  sql,
+} from "drizzle-orm";
 import type { z } from "zod";
 import { db } from "../db/client.js";
 import {
@@ -52,6 +60,7 @@ export async function getNote(tenantId: string, id: string) {
 export async function queryNotes(
   tenantId: string,
   input: z.infer<typeof noteFilter>,
+  includeBody = true,
 ) {
   const conditions = [eq(notes.tenantId, tenantId)];
   if (input.view === "trash") conditions.push(isNotNull(notes.trashedAt));
@@ -78,7 +87,10 @@ export async function queryNotes(
         where ${noteTags.tenantId} = ${tenantId} and ${noteTags.noteId} = ${notes.id} and ${tags.name} ilike ${pattern}))`);
   }
   const rows = await db
-    .select()
+    .select({
+      ...getTableColumns(notes),
+      body: includeBody ? notes.body : sql<string>`''`,
+    })
     .from(notes)
     .where(and(...conditions))
     .orderBy(desc(notes.updatedAt), notes.id)
@@ -87,6 +99,23 @@ export async function queryNotes(
   return {
     notes: rows.slice(0, input.limit).map(publicNote),
     hasMore: rows.length > input.limit,
+  };
+}
+
+/** Compact MCP discovery avoids loading note bodies from PostgreSQL. */
+export async function queryNoteMetadata(
+  tenantId: string,
+  input: z.infer<typeof noteFilter>,
+) {
+  const result = await queryNotes(tenantId, input, false);
+  return {
+    notes: result.notes.map((note) => {
+      const { body, ...metadata } = note;
+      void body;
+      return metadata;
+    }),
+    hasMore: result.hasMore,
+    nextOffset: result.hasMore ? input.offset + input.limit : null,
   };
 }
 export async function navigation(tenantId: string) {
@@ -294,15 +323,13 @@ export async function setInstructions(
         .set({ instructions: text, updatedAt: new Date() })
         .where(condition);
     else
-      await tx
-        .insert(instructions)
-        .values({
-          id: randomUUID(),
-          tenantId,
-          folderId,
-          scopeType: folderId ? "folder" : "workspace",
-          instructions: text,
-        });
+      await tx.insert(instructions).values({
+        id: randomUUID(),
+        tenantId,
+        folderId,
+        scopeType: folderId ? "folder" : "workspace",
+        instructions: text,
+      });
     return { ok: true };
   });
 }

@@ -761,6 +761,91 @@ describe("OAuth organization-bound lifecycle", () => {
         }),
       );
       expect(updated.version).toBe(2);
+      const proposal = output(
+        await callMcpTool(TEST_BASE, token.access_token, "note.proposeUpdate", {
+          id: created.id,
+          expectedVersion: 2,
+          title: "MCP scoped write",
+          body: "human-reviewed memory",
+          reason: "Verified implementation",
+          source: "repository commit abc123",
+          oauthClientId: "forged",
+        }),
+      );
+      const proposalRead = await callMcpTool(
+        TEST_BASE,
+        grantA.accessToken,
+        "proposal.get",
+        { id: proposal.id },
+      );
+      expect(JSON.stringify(proposalRead.body)).toContain(HARNESS_CLIENT_ID);
+      expect(JSON.stringify(proposalRead.body)).not.toContain("forged");
+      const forbiddenReview = await callMcpTool(
+        TEST_BASE,
+        token.access_token,
+        "proposal.accept",
+        { id: proposal.id },
+      );
+      expect(JSON.stringify(forbiddenReview.body)).toMatch(
+        /error|not found|not available/i,
+      );
+      // Web review remains bound to the active session workspace, unlike OAuth grants.
+      const wrongWorkspace = await fetchWithCookies(
+        jar,
+        `${TEST_BASE}/api/workspace/commands`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-workspace-id": orgA,
+            origin: TEST_BASE,
+          },
+          body: JSON.stringify({
+            command: "proposal.accept",
+            input: { id: proposal.id },
+          }),
+        },
+      );
+      expect(wrongWorkspace.status).toBe(409);
+      await fetchWithCookies(
+        jar,
+        `${TEST_BASE}/api/auth/organization/set-active`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ organizationId: orgA }),
+        },
+      );
+      const reviewed = await fetchWithCookies(
+        jar,
+        `${TEST_BASE}/api/workspace/commands`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-workspace-id": orgA,
+            origin: TEST_BASE,
+          },
+          body: JSON.stringify({
+            command: "proposal.accept",
+            input: { id: proposal.id },
+          }),
+        },
+      );
+      expect(reviewed.status).toBe(200);
+      expect(await reviewed.json()).toMatchObject({
+        status: "accepted",
+        appliedVersion: 3,
+        reviewedByUserId: userId,
+      });
+      const retrieved = await callMcpTool(
+        TEST_BASE,
+        grantA.accessToken,
+        "note.get",
+        { id: created.id },
+      );
+      expect(JSON.stringify(retrieved.body)).toContain("human-reviewed memory");
+
       const stale = await callMcpTool(
         TEST_BASE,
         token.access_token,
@@ -794,15 +879,13 @@ describe("OAuth organization-bound lifecycle", () => {
         .from(member)
         .where(and(eq(member.userId, userId), eq(member.organizationId, orgA)));
       if (!membership.length)
-        await db
-          .insert(member)
-          .values({
-            id: randomUUID(),
-            organizationId: orgA,
-            userId,
-            role: "owner",
-            createdAt: new Date(),
-          });
+        await db.insert(member).values({
+          id: randomUUID(),
+          organizationId: orgA,
+          userId,
+          role: "owner",
+          createdAt: new Date(),
+        });
     }
   }, 60_000);
 });
