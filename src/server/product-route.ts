@@ -9,7 +9,10 @@ import {
   ProductError,
   type ProductCommand,
 } from "../domain/product-inputs.js";
-import { getCurrentMembership } from "../services/membership-service.js";
+import {
+  canReviewProposals,
+  getCurrentMembership,
+} from "../services/membership-service.js";
 import { executeProductCommand } from "../services/product-service.js";
 import { listFolders } from "../repositories/folder-repository.js";
 import { listTags } from "../repositories/tag-repository.js";
@@ -60,7 +63,11 @@ export async function handleProductRoute(
     if (!tenantId)
       throw new ProductError("no_active_workspace", "Select a workspace", 409);
     const context = await auth.$context;
-    await getCurrentMembership(context.adapter, session.user.id, tenantId);
+    const membership = await getCurrentMembership(
+      context.adapter,
+      session.user.id,
+      tenantId,
+    );
     // A precondition only: never an authority source. Protects in-flight/tab switches.
     const expected = request.headers["x-workspace-id"];
     if (expected !== tenantId)
@@ -102,6 +109,10 @@ export async function handleProductRoute(
           session.user.id,
           data.command as ProductCommand,
           input,
+          {
+            kind: "web",
+            canReviewProposals: canReviewProposals(membership.role),
+          },
         ),
       );
       return;
@@ -122,11 +133,10 @@ export async function handleProductRoute(
         break;
       }
       case "proposal":
-        json(
-          response,
-          200,
-          await getProposal(tenantId, params.get("id") ?? ""),
-        );
+        json(response, 200, {
+          ...(await getProposal(tenantId, params.get("id") ?? "")),
+          canReview: canReviewProposals(membership.role),
+        });
         break;
       case "navigation":
         json(response, 200, {

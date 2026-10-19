@@ -48,6 +48,30 @@ describe("MCP product authorization", () => {
     ).rejects.toThrow();
     expect(execute).not.toHaveBeenCalled();
   });
+  it("allows proposal-only grants without advertising or dispatching direct writes", async () => {
+    const proposer = { ...context, scopes: ["mcp:read", "mcp:propose"] };
+    await executeMcpMutation(proposer, "note.proposeUpdate", {});
+    execute.mockClear();
+    for (const name of [
+      "note.update",
+      "note.create",
+      "note.trash",
+      "instructions.set",
+    ] as const)
+      await expect(
+        executeMcpMutation(proposer, name, {}),
+      ).rejects.toMatchObject({ status: 403 });
+    expect(execute).not.toHaveBeenCalled();
+    const server = new McpServer({ name: "proposer", version: "1" });
+    const register = vi.spyOn(server, "registerTool");
+    registerProductTools(server, proposer);
+    expect(register.mock.calls.map((call) => call[0])).toContain(
+      "note.proposeUpdate",
+    );
+    expect(register.mock.calls.map((call) => call[0])).not.toContain(
+      "note.update",
+    );
+  });
   it("uses grant authority even when input claims another tenant", async () => {
     await executeMcpMutation(
       { ...context, scopes: ["mcp:read", "mcp:write"] },

@@ -29,7 +29,11 @@ export async function executeProductCommand(
   userId: string,
   command: ProductCommand,
   raw: unknown,
-  actor: { kind: "web" | "mcp"; oauthClientId?: string } = { kind: "web" },
+  actor: {
+    kind: "web" | "mcp";
+    oauthClientId?: string;
+    canReviewProposals?: boolean;
+  } = { kind: "web" },
 ) {
   switch (command) {
     case "note.proposeUpdate":
@@ -41,8 +45,10 @@ export async function executeProductCommand(
       );
     case "proposal.accept":
     case "proposal.reject": {
-      if (actor.kind !== "web")
-        throw new ForbiddenError("Review requires a signed-in human session");
+      if (actor.kind !== "web" || !actor.canReviewProposals)
+        throw new ForbiddenError(
+          "Review requires a signed-in workspace owner or admin",
+        );
       const { id } = productCommands[command].parse(raw);
       return reviewProposal(
         tenantId,

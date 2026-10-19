@@ -49,6 +49,7 @@ beforeEach(() => {
   };
   proposal = {
     id: "proposal-a",
+    canReview: true,
     noteId: "a",
     title: "Reviewed agent title",
     body: "Agent proposed body",
@@ -149,6 +150,13 @@ beforeEach(() => {
             version: 1,
             title: note.title,
             body: "Historical body",
+            proposal: {
+              id: "proposal-a",
+              proposedByUserId: "agent-user",
+              oauthClientId: "client-a",
+              source: "repo/commit/history",
+              reviewedByUserId: "reviewer-user",
+            },
             createdAt: note.createdAt,
           },
         ],
@@ -294,6 +302,9 @@ describe("document interactions", () => {
     mount();
     await user.click(await screen.findByRole("button", { name: "History" }));
     await user.click(await screen.findByRole("button", { name: /Version 1/ }));
+    expect(screen.getByText("agent-user")).toBeInTheDocument();
+    expect(screen.getByText("reviewer-user")).toBeInTheDocument();
+    expect(screen.getByText("repo/commit/history")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Restore version 1" }));
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -350,6 +361,41 @@ describe("document interactions", () => {
         init?.body?.includes('"proposal.accept"'),
       ),
     ).toBe(false);
+  });
+  it("hides review controls for ordinary members", async () => {
+    proposal.canReview = false;
+    const user = userEvent.setup();
+    mount();
+    await user.click(
+      await screen.findByRole("button", { name: "Agent changes" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Reviewed agent title/ }),
+    );
+    expect(
+      await screen.findByText(/owner or admin must review/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Accept and save" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Reject proposal" }),
+    ).not.toBeInTheDocument();
+  });
+  it("disables acceptance of expired proposals", async () => {
+    proposal.expired = true;
+    const user = userEvent.setup();
+    mount();
+    await user.click(
+      await screen.findByRole("button", { name: "Agent changes" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Reviewed agent title/ }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Accept and save" }),
+    ).toBeDisabled();
+    expect(screen.getByText(/This proposal expired/)).toBeInTheDocument();
   });
   it("protects an open draft from proposal acceptance", async () => {
     const user = userEvent.setup();

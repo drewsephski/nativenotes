@@ -293,7 +293,7 @@ Authorization server (`GET /api/auth/.well-known/oauth-authorization-server`):
 - `authorization_response_iss_parameter_supported`: `true`
 - `token_endpoint_auth_methods_supported`: includes `none`, `private_key_jwt`
 - `grant_types_supported`: includes `authorization_code`, `refresh_token`
-- `scopes_supported`: `openid`, `offline_access`, `mcp:read`, `mcp:write`, `mcp:instructions`, `mcp:admin`
+- `scopes_supported`: `openid`, `offline_access`, `mcp:read`, `mcp:write`, `mcp:propose`, `mcp:instructions`, `mcp:admin`
 - `registration_endpoint`: absent (DCR disabled)
 
 Protected resource (`GET /.well-known/oauth-protected-resource`):

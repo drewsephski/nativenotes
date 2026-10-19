@@ -21,6 +21,7 @@ export default betterAuth({
         "offline_access",
         "mcp:read",
         "mcp:write",
+        "mcp:propose",
         "mcp:instructions",
         "mcp:admin",
       ],

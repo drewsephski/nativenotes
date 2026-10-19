@@ -42,6 +42,7 @@ export const productCommands = {
   "note.proposeUpdate": noteContent.extend({
     id,
     expectedVersion: z.number().int().positive(),
+    idempotencyKey: z.string().trim().min(1).max(200).optional(),
     reason: z.string().trim().min(1).max(4000),
     source: z.string().trim().min(1).max(4000),
   }),

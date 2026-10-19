@@ -31,6 +31,13 @@ export type Navigation = {
   folderCounts: Record<string, number>;
 };
 export type Revision = {
+  proposal?: {
+    id: string;
+    proposedByUserId: string;
+    oauthClientId: string | null;
+    source: string;
+    reviewedByUserId: string | null;
+  } | null;
   id: string;
   version: number;
   title: string;
@@ -106,6 +113,9 @@ export type ProposalMetadata = {
   appliedVersion: number | null;
 };
 export type NoteProposal = ProposalMetadata & {
+  canReview?: boolean;
+  expiresAt?: string;
+  expired?: boolean;
   body: string;
   summary: string | null;
   base: { title: string; body: string; summary: string | null };
