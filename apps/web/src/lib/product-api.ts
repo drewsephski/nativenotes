@@ -78,7 +78,9 @@ export async function productRequest<T>(
     new URL(`/api/workspace/${resource}`, getNativeNotesApiUrl()),
     {
       credentials: "include",
-      signal,
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+        : AbortSignal.timeout(30_000),
       method: options ? "POST" : "GET",
       headers: {
         "content-type": "application/json",

@@ -214,6 +214,49 @@ export function renderConsentPage(input: {
 
   const clientName = clientDisplayName(clientId);
   const scopes = humanizeScopes(parseRequestedScopes(scopeParam));
+  const requested = parseRequestedScopes(scopeParam);
+  const basic = requested.filter(
+    (scope) =>
+      !["mcp:write", "mcp:propose", "mcp:instructions", "mcp:admin"].includes(
+        scope,
+      ),
+  );
+  const accessOptions = [
+    ...(requested.includes("mcp:propose")
+      ? [
+          {
+            label: "Read and propose (recommended)",
+            scopes: [...basic, "mcp:propose"],
+          },
+        ]
+      : []),
+    { label: "Read only", scopes: basic },
+    ...(requested.includes("mcp:write")
+      ? [
+          {
+            label: "Direct write",
+            scopes: [
+              ...basic,
+              "mcp:write",
+              ...(requested.includes("mcp:propose") ? ["mcp:propose"] : []),
+            ],
+          },
+        ]
+      : []),
+    ...(requested.includes("mcp:instructions") ||
+    requested.includes("mcp:admin")
+      ? [
+          {
+            label:
+              "All requested permissions (including instruction or admin access)",
+            scopes: requested,
+          },
+        ]
+      : []),
+  ];
+  const accessSelection = `<div class="nn-field"><label class="nn-label" for="access_scope">Access level</label>
+<select class="nn-select" id="access_scope" name="scope">${accessOptions.map((option) => `<option value="${escapeHtml(option.scopes.join(" "))}">${escapeHtml(option.label)}</option>`).join("")}</select>
+<p class="nn-hint">Only permissions requested by this client can be granted. Read and propose keeps changes in human review. Existing authorizations remain active until revoked in Connected apps.</p></div>`;
   const messageHtml = input.message
     ? alertHtml(input.message.text, input.message.tone ?? "info")
     : "";
@@ -287,6 +330,7 @@ ${scopeList}
 <input type="hidden" name="action" value="approve">
 ${hiddenOAuthQuery(input.oauthQuery)}
 <input type="hidden" name="accept" value="true">
+${accessSelection}
 <div class="nn-field">
 <label class="nn-label" for="organization_id">Workspace</label>
 <select class="nn-select" id="organization_id" name="organization_id" required data-testid="organization-select" aria-required="true">

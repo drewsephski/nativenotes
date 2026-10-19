@@ -19,6 +19,8 @@ const max = resolveMaxConnections(env.NODE_ENV);
 export const sql = postgres(env.DATABASE_URL, {
   max,
   prepare: false,
+  connect_timeout: 5,
+  idle_timeout: 20,
 });
 
 export const combinedSchema = { ...authSchema, ...schema };

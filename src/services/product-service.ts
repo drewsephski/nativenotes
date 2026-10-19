@@ -1,3 +1,5 @@
+import { createNoteOnce } from "../repositories/note-create-repository.js";
+import { getMcpPolicy } from "../repositories/connection-repository.js";
 import {
   productCommands,
   ProductError,
@@ -35,6 +37,14 @@ export async function executeProductCommand(
     canReviewProposals?: boolean;
   } = { kind: "web" },
 ) {
+  if (
+    actor.kind === "mcp" &&
+    command !== "note.proposeUpdate" &&
+    (await getMcpPolicy(tenantId)).requireReview
+  )
+    throw new ForbiddenError(
+      "This workspace requires human review. Submit a proposal instead.",
+    );
   switch (command) {
     case "note.proposeUpdate":
       return proposeUpdate(
@@ -59,6 +69,16 @@ export async function executeProductCommand(
     }
     case "note.create": {
       const input = productCommands[command].parse(raw);
+      if (input.idempotencyKey) {
+        const id = await createNoteOnce({
+          ...input,
+          tenantId,
+          userId,
+          clientId: actor.oauthClientId,
+          idempotencyKey: input.idempotencyKey,
+        });
+        return getNote(tenantId, id);
+      }
       const note = await createNoteForTenant({
         ...input,
         tenantId,

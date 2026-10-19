@@ -1,3 +1,9 @@
+import {
+  getMcpPolicy,
+  setMcpPolicy,
+  listConnections,
+} from "../repositories/connection-repository.js";
+import { revokeClientGrants } from "../repositories/oauth-grant-tenant-repository.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../auth/auth.js";
@@ -80,7 +86,7 @@ export async function handleProductRoute(
     const resource = url.pathname.slice("/api/workspace/".length);
     const params = url.searchParams;
     if (request.method === "POST") {
-      if (resource !== "commands")
+      if (!["commands", "connections/revoke", "mcp-policy"].includes(resource))
         throw new ProductError("not_found", "Route not found", 404);
       let size = 0;
       const chunks: Buffer[] = [];
@@ -92,6 +98,27 @@ export async function handleProductRoute(
         chunks.push(buffer);
       }
       const data: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (resource === "connections/revoke") {
+        const { clientId } = z
+          .object({
+            input: z.object({ clientId: z.string().min(1).max(2048) }),
+          })
+          .parse(data).input;
+        await revokeClientGrants(tenantId, session.user.id, clientId);
+        json(response, 200, { revoked: true });
+        return;
+      }
+      if (resource === "mcp-policy") {
+        if (!canReviewProposals(membership.role))
+          throw new ForbiddenError(
+            "Only workspace owners and admins can change MCP policy",
+          );
+        const { requireReview } = z
+          .object({ input: z.object({ requireReview: z.boolean() }) })
+          .parse(data).input;
+        json(response, 200, await setMcpPolicy(tenantId, requireReview));
+        return;
+      }
       if (
         !data ||
         typeof data !== "object" ||
@@ -118,6 +145,13 @@ export async function handleProductRoute(
       return;
     }
     switch (resource) {
+      case "connections":
+        json(response, 200, {
+          connections: await listConnections(tenantId, session.user.id),
+          policy: await getMcpPolicy(tenantId),
+          canManagePolicy: canReviewProposals(membership.role),
+        });
+        break;
       case "proposals": {
         const offset = z.coerce
           .number()
@@ -189,10 +223,10 @@ export async function handleProductRoute(
   } catch (error) {
     const failure = productError(error);
     if (failure.status === 500)
-      console.error(
-        "workspace request failed",
-        error instanceof Error ? error.message : "unknown",
-      );
+      console.error("workspace request failed", {
+        requestId: response.getHeader?.("x-request-id"),
+        error: "internal_server_error",
+      });
     json(response, failure.status, failure);
   }
 }

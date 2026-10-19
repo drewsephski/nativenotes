@@ -1,5 +1,7 @@
+import { discoveryOutput, toolResult } from "./output-schemas.js";
+import { productError } from "../domain/product-errors.js";
+import { ForbiddenError } from "../domain/errors.js";
 import { registerProductTools } from "./product-tools.js";
-import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/server";
 
 import type { AuthContext } from "../domain/auth-context.js";
@@ -7,14 +9,6 @@ import type { NoteRepository } from "../repositories/note-repository.js";
 import { listNotes as listNotesFromService } from "../services/note-service.js";
 import { noteFilter } from "../domain/product-inputs.js";
 import { queryNoteMetadata } from "../repositories/knowledge-repository.js";
-
-const noteOutput = z.object({
-  id: z.string(),
-  title: z.string(),
-  version: z.number(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
 
 /** Re-export shared service entry for MCP + unit tests. */
 export async function listNotes(
@@ -34,22 +28,35 @@ export function createMcpServer(authContext: AuthContext): McpServer {
       description:
         "Read-only. List note metadata without bodies for the workspace bound to this OAuth token. Use note.get for content. Defaults to active notes, with limit/offset pagination and nextOffset. Tenant authority never comes from tool input.",
       inputSchema: noteFilter,
-      outputSchema: z.object({
-        notes: z.array(noteOutput),
-        hasMore: z.boolean(),
-        nextOffset: z.number().nullable(),
-      }),
+      outputSchema: discoveryOutput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (input) => {
-      const output = await queryNoteMetadata(
-        authContext.tenantId,
-        noteFilter.parse(input),
-      );
+      try {
+        if (!authContext.scopes.includes("mcp:read"))
+          throw new ForbiddenError("Requires mcp:read");
+        const output = await queryNoteMetadata(
+          authContext.tenantId,
+          noteFilter.parse(input),
+        );
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(output) }],
-        structuredContent: output,
-      };
+        return toolResult(discoveryOutput, output);
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(productError(error)),
+            },
+          ],
+        };
+      }
     },
   );
 

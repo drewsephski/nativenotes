@@ -1,3 +1,4 @@
+import { setTransactionTimeouts } from "../db/timeouts.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -100,6 +101,7 @@ export async function mergeTag(tenantId: string, id: string, intoId: string) {
       "Choose a different destination tag",
     );
   return db.transaction(async (tx) => {
+    await setTransactionTimeouts(tx);
     // Deterministic row-lock order prevents opposite merges deadlocking.
     const all = await tx
       .select()

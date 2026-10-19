@@ -1,3 +1,4 @@
+import { setTransactionTimeouts } from "../db/timeouts.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
@@ -52,6 +53,7 @@ export const noteRepository: NoteRepository = {
 
   async create(input) {
     return db.transaction(async (tx) => {
+      await setTransactionTimeouts(tx);
       const [note] = await tx
         .insert(notes)
         .values({
@@ -71,6 +73,7 @@ export const noteRepository: NoteRepository = {
 
   async update(input) {
     return db.transaction(async (tx) => {
+      await setTransactionTimeouts(tx);
       return updateNoteInTransaction(tx, input);
     });
   },

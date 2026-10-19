@@ -845,6 +845,39 @@ describe("OAuth organization-bound lifecycle", () => {
         { id: created.id },
       );
       expect(JSON.stringify(retrieved.body)).toContain("human-reviewed memory");
+      const revisionPage = await callMcpTool(
+        TEST_BASE,
+        token.access_token,
+        "note.history",
+        { id: created.id, limit: 1 },
+      );
+      expect(revisionPage.body).toMatchObject({
+        result: {
+          structuredContent: {
+            hasMore: true,
+            nextOffset: 1,
+            revisions: [
+              expect.objectContaining({
+                version: 3,
+                proposal: expect.objectContaining({ id: proposal.id }),
+              }),
+            ],
+          },
+        },
+      });
+      const priorPage = await callMcpTool(
+        TEST_BASE,
+        token.access_token,
+        "note.history",
+        { id: created.id, limit: 1, offset: 1 },
+      );
+      expect(priorPage.body).toMatchObject({
+        result: {
+          structuredContent: {
+            revisions: [expect.objectContaining({ version: 2 })],
+          },
+        },
+      });
 
       const stale = await callMcpTool(
         TEST_BASE,
@@ -887,5 +920,81 @@ describe("OAuth organization-bound lifecycle", () => {
           createdAt: new Date(),
         });
     }
+  }, 60_000);
+  it("revokes existing access and refresh tokens through workspace controls, then reconnects safely", async () => {
+    await fetchWithCookies(
+      jar,
+      `${TEST_BASE}/api/auth/organization/set-active`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ organizationId: orgA }),
+      },
+    );
+    const controls = await fetchWithCookies(
+      jar,
+      `${TEST_BASE}/api/workspace/connections`,
+      { headers: { "x-workspace-id": orgA } },
+    );
+    expect(controls.status).toBe(200);
+    expect(await controls.json()).toMatchObject({
+      canManagePolicy: true,
+      connections: expect.arrayContaining([
+        expect.objectContaining({ clientId: HARNESS_CLIENT_ID }),
+      ]),
+    });
+    const revoked = await fetchWithCookies(
+      jar,
+      `${TEST_BASE}/api/workspace/connections/revoke`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: TEST_BASE,
+          "x-workspace-id": orgA,
+        },
+        body: JSON.stringify({
+          command: "connection.revoke",
+          input: { clientId: HARNESS_CLIENT_ID },
+        }),
+      },
+    );
+    expect(revoked.status).toBe(200);
+    expect((await callNoteList(TEST_BASE, grantA.accessToken)).status).toBe(
+      403,
+    );
+    const refresh = await refreshAccessToken({
+      baseUrl: TEST_BASE,
+      refreshToken: grantA.refreshToken,
+      resource: env.MCP_RESOURCE_URL,
+    });
+    expect(refresh.status).toBe(400);
+    expect((await callNoteList(TEST_BASE, grantB.accessToken)).status).toBe(
+      200,
+    );
+    const authorization = await authorizeForOrganization({
+      baseUrl: TEST_BASE,
+      jar,
+      organizationId: orgA,
+      resource: env.MCP_RESOURCE_URL,
+    });
+    const fresh = await exchangeAuthorizationCode({
+      baseUrl: TEST_BASE,
+      code: authorization.code,
+      verifier: authorization.verifier,
+      resource: env.MCP_RESOURCE_URL,
+    });
+    expect((await callNoteList(TEST_BASE, fresh.access_token)).status).toBe(
+      200,
+    );
+    expect((await callNoteList(TEST_BASE, grantA.accessToken)).status).toBe(
+      403,
+    );
+    const refreshAgain = await refreshAccessToken({
+      baseUrl: TEST_BASE,
+      refreshToken: grantA.refreshToken,
+      resource: env.MCP_RESOURCE_URL,
+    });
+    expect(refreshAgain.status).toBe(400);
   }, 60_000);
 });

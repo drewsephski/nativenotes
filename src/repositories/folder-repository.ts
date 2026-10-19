@@ -1,3 +1,4 @@
+import { setTransactionTimeouts } from "../db/timeouts.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
@@ -25,6 +26,7 @@ export async function saveFolder(
   input: z.infer<typeof folderCreate> | z.infer<typeof folderUpdate>,
 ) {
   return db.transaction(async (tx) => {
+    await setTransactionTimeouts(tx);
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`folders:${tenantId}`}, 0))`,
     );

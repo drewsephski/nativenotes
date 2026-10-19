@@ -34,7 +34,9 @@ export const instructionInput = z.object({
   instructions: z.string().max(30_000),
 });
 export const productCommands = {
-  "note.create": noteContent,
+  "note.create": noteContent.extend({
+    idempotencyKey: z.string().trim().min(1).max(200).optional(),
+  }),
   "note.update": noteContent.extend({
     id,
     expectedVersion: z.number().int().positive(),

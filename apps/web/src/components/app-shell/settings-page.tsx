@@ -1,4 +1,5 @@
 "use client";
+import { ConnectedApps } from "./connected-apps";
 import { useState } from "react";
 import Link from "next/link";
 import {
@@ -124,6 +125,7 @@ export function SettingsPage() {
           Edit workspace instructions
         </Link>
       </section>
+      <ConnectedApps />
       <section className="space-y-3 border-t border-border py-7">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">MCP endpoint</h2>

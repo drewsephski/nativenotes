@@ -1,3 +1,5 @@
+import { observeRequest, requestPeer } from "./request-observation.js";
+import { consumeRequestBudget } from "../services/request-budget.js";
 import { handleProductRoute } from "./product-route.js";
 import {
   createServer,
@@ -41,7 +43,7 @@ function writeJson(
 }
 
 export function createNativeNotesRequestListener() {
-  return (request: IncomingMessage, response: ServerResponse) => {
+  const handle = (request: IncomingMessage, response: ServerResponse) => {
     const pathname = new URL(request.url ?? "/", env.BETTER_AUTH_URL).pathname;
 
     if (request.method === "GET" && pathname === "/health") {
@@ -107,11 +109,8 @@ export function createNativeNotesRequestListener() {
     if (pathname === "/api/notes" || pathname.startsWith("/api/notes/")) {
       // Cross-origin browser calls from the Next.js shell (e.g. :3001 → :3000).
       if (applyTrustedOriginCors(request, response)) return;
-      void handleNotesRoute(request, response).catch((error) => {
-        console.error(
-          "notes route failure",
-          error instanceof Error ? error.message : "unknown",
-        );
+      void handleNotesRoute(request, response).catch(() => {
+        console.error("notes route failure");
         if (!response.headersSent)
           writeJson(response, 500, { error: "internal_server_error" });
       });
@@ -130,11 +129,45 @@ export function createNativeNotesRequestListener() {
 
     writeJson(response, 404, { error: "not_found" });
   };
+  return (request: IncomingMessage, response: ServerResponse) => {
+    observeRequest(request, response);
+    const path = (request.url ?? "/").split("?")[0]!;
+    // Session reads are not login attempts. Limit token exchanges and public auth mutations.
+    const limited =
+      request.method === "POST" &&
+      (path.startsWith("/api/auth/") ||
+        ["/sign-in", "/sign-up", "/sign-in/google"].includes(path));
+    if (!limited) {
+      handle(request, response);
+      return;
+    }
+    void (async () => {
+      const budget = await consumeRequestBudget(
+        `auth:${requestPeer(request)}`,
+        60,
+      );
+      if (!budget.allowed) {
+        response.setHeader("retry-after", budget.retryAfter);
+        writeJson(response, 429, {
+          error: "rate_limited",
+          message: "Too many authentication requests. Try again shortly.",
+        });
+        return;
+      }
+      handle(request, response);
+    })().catch(() => {
+      if (!response.headersSent)
+        writeJson(response, 503, { error: "temporarily_unavailable" });
+    });
+  };
 }
 
 /** Test / harness helper. Production and `pnpm dev` use root `server.ts`. */
 export function startNativeNotesServer(port = env.PORT) {
-  const server = createServer(createNativeNotesRequestListener());
+  const server = createServer(
+    { requestTimeout: 30_000, headersTimeout: 15_000 },
+    createNativeNotesRequestListener(),
+  );
   return new Promise<{
     server: ReturnType<typeof createServer>;
     port: number;

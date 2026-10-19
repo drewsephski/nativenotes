@@ -45,9 +45,9 @@ describe("auth display helpers", () => {
   });
 
   it("names known CIMD clients and suggests workspace titles", () => {
-    expect(
-      clientDisplayName("https://chatgpt.com/oauth/client.json"),
-    ).toBe("ChatGPT");
+    expect(clientDisplayName("https://chatgpt.com/oauth/client.json")).toBe(
+      "ChatGPT",
+    );
     expect(suggestedWorkspaceName("Ada Lovelace")).toBe("Ada's Workspace");
     expect(suggestedWorkspaceName(undefined)).toBe("Personal");
   });
@@ -89,9 +89,9 @@ describe("auth display helpers", () => {
         base,
       ),
     ).toBe(false);
-    expect(
-      isExternalAuthRedirect("/api/auth/sign-in/social", base),
-    ).toBe(false);
+    expect(isExternalAuthRedirect("/api/auth/sign-in/social", base)).toBe(
+      false,
+    );
     expect(
       isExternalAuthRedirect(
         "https://accounts.google.com/o/oauth2/v2/auth?client_id=x",
@@ -169,4 +169,25 @@ describe("auth UI pages", () => {
     expect(withOrgs).toContain('data-testid="consent-deny"');
     expect(withOrgs).toContain("Organization A");
   });
+});
+
+it("offers only requested consent permissions and prefers reviewed proposals", () => {
+  const html = renderConsentPage({
+    organizations: [{ id: "org", name: "QA" }],
+    oauthQuery: new URLSearchParams({
+      client_id: "test",
+      scope: "openid mcp:read mcp:write mcp:propose",
+    }).toString(),
+  });
+  expect(html).toContain('name="scope"');
+  expect(html.indexOf("Read and propose (recommended)")).toBeLessThan(
+    html.indexOf(">Direct write<"),
+  );
+  expect(html).toContain('value="openid mcp:read mcp:propose"');
+  const read = renderConsentPage({
+    organizations: [{ id: "org", name: "QA" }],
+    oauthQuery: "scope=mcp%3Aread",
+  });
+  expect(read).not.toContain(">Direct write<");
+  expect(read).not.toContain("Read and propose (recommended)");
 });

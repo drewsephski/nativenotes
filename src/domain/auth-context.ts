@@ -4,4 +4,5 @@ export type AuthContext = {
   scopes: string[];
   roles: string[];
   oauthClientId?: string;
+  requireReview?: boolean;
 };

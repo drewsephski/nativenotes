@@ -1,3 +1,4 @@
+import type * as GrantRepository from "../src/repositories/oauth-grant-tenant-repository.js";
 const noteDefaults = {
   folderId: null,
   summary: null,
@@ -9,7 +10,17 @@ const noteDefaults = {
   purgeAfter: null,
   createdByUserId: null,
 };
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock(
+  "../src/repositories/oauth-grant-tenant-repository.js",
+  async (original) => ({
+    ...(await original<typeof GrantRepository>()),
+    requireActiveGrant: vi.fn(),
+  }),
+);
+vi.mock("../src/repositories/connection-repository.js", () => ({
+  getMcpPolicy: async () => ({ requireReview: false }),
+}));
 
 import {
   getSelectedOrganization,
@@ -88,6 +99,7 @@ describe("tenant auth context", () => {
     const payload = {
       sub: "user-a",
       scope: "mcp:read",
+      client_id: "client-1",
       [tenantClaim]: "org-a",
       [tenantRoleClaim]: "member",
     };

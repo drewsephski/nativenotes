@@ -13,19 +13,23 @@ interface AuthGateProps {
  * Unauthenticated users are sent to the Node sign-in UI (not a Next login page).
  */
 export function AuthGate({ children }: AuthGateProps) {
-  const { data: session, isPending, error } = useSession();
+  const { data: session, isPending, error, refetch } = useSession();
 
   useEffect(() => {
     if (isPending) return;
-    if (session) return;
-    // Session missing or fetch failed without a session — use backend sign-in.
+    if (session || error) return;
+    // A failed session lookup does not mean the user signed out.
     window.location.assign(getSignInUrl("/app"));
-  }, [isPending, session]);
+  }, [isPending, session, error]);
 
   if (isPending) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background px-4">
-        <div className="w-full max-w-sm space-y-3" aria-busy="true" aria-label="Loading session">
+        <div
+          className="w-full max-w-sm space-y-3"
+          aria-busy="true"
+          aria-label="Loading session"
+        >
           <div className="h-3 w-24 animate-pulse rounded bg-muted" />
           <div className="h-8 w-full animate-pulse rounded-md bg-muted" />
           <div className="h-8 w-3/4 animate-pulse rounded-md bg-muted" />
@@ -38,11 +42,18 @@ export function AuthGate({ children }: AuthGateProps) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-background px-4 text-center">
         <p className="text-[13px] text-muted-foreground">
-          Unable to reach NativeNotes auth. Is the backend running?
+          We couldn’t check your session. Try again to continue.
         </p>
         <p className="font-mono text-[11px] text-muted-foreground/80">
           {error.message || "Session fetch failed"}
         </p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="text-[13px] underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Retry connection
+        </button>
         <a
           href={getSignInUrl("/app")}
           className="text-[13px] text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -56,7 +67,9 @@ export function AuthGate({ children }: AuthGateProps) {
   if (!session) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background px-4">
-        <p className="text-[13px] text-muted-foreground">Redirecting to sign in…</p>
+        <p className="text-[13px] text-muted-foreground">
+          Redirecting to sign in…
+        </p>
       </div>
     );
   }

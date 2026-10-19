@@ -1,3 +1,4 @@
+import { consumeRequestBudget } from "../services/request-budget.js";
 import { createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
 import { requireMcpAuth } from "@better-auth/mcp";
 
@@ -67,6 +68,21 @@ export const protectedMcpHandler = requireMcpAuth(
     try {
       const context = await auth.$context;
       const authContext = await buildAuthContext(claims, context.adapter);
+      const budget = await consumeRequestBudget(
+        `mcp:${authContext.userId}:${authContext.tenantId}:${authContext.oauthClientId}`,
+        120,
+      );
+      if (!budget.allowed)
+        return Response.json(
+          { error: "rate_limited" },
+          {
+            status: 429,
+            headers: {
+              "retry-after": String(budget.retryAfter),
+              "cache-control": "no-store",
+            },
+          },
+        );
       const method = await mcpMethodName(request);
       console.info("[mcp]", {
         method,
@@ -105,7 +121,10 @@ export const protectedMcpHandler = requireMcpAuth(
         return authFailureResponse(error);
       }
       console.error("MCP auth handler failure");
-      return authFailureResponse(error);
+      return Response.json(
+        { error: "temporarily_unavailable" },
+        { status: 503, headers: { "cache-control": "no-store" } },
+      );
     }
   },
   {

@@ -1,3 +1,4 @@
+import { setTransactionTimeouts } from "../db/timeouts.js";
 import { createHash, randomUUID } from "node:crypto";
 import { and, count, desc, eq, gt } from "drizzle-orm";
 import type { z } from "zod";
@@ -27,6 +28,7 @@ export async function proposeUpdate(
   oauthClientId?: string,
 ) {
   return db.transaction(async (tx) => {
+    await setTransactionTimeouts(tx);
     const [note] = await tx
       .select()
       .from(notes)
@@ -216,6 +218,7 @@ export async function reviewProposal(
   accept: boolean,
 ) {
   return db.transaction(async (tx) => {
+    await setTransactionTimeouts(tx);
     const [proposal] = await tx
       .select()
       .from(noteProposals)

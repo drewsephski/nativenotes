@@ -2,7 +2,7 @@
 
 Backend-first foundation for a multi-tenant MCP notes service, inspired by Hjarni. This repository proves Better Auth OAuth/MCP, organization-bound tenant claims, membership revocation checks, and note APIs — with a **Next.js** public surface (`apps/web`) and an independently deployable **Node** backend (repo root).
 
-The app includes folders, tags, immutable revisions, and tenant-scoped MCP tools. The [agent proposal loop](docs/AGENT-LOOP.md) adds human diff review for agent-submitted changes and compact MCP discovery. Semantic retrieval and background maintenance remain future work.
+The app includes folders, tags, immutable revisions, and tenant-scoped MCP tools. The [agent proposal loop](docs/AGENT-LOOP.md) adds human diff review for agent-submitted changes and compact MCP discovery. Semantic retrieval remains future work. Connection controls, retry-safe writes, operational checks, and the production acceptance procedure are documented in [MCP readiness](docs/MCP-READINESS.md).
 
 ## Requirements
 

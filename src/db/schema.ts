@@ -101,6 +101,7 @@ export const oauthGrantTenant = pgTable(
     resource: text("resource").notNull(),
     scopes: text("scopes").array().notNull(),
     stableGrantIdentifier: text("stable_grant_identifier").notNull(),
+    tokenVersion: integer("token_version").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -289,3 +290,29 @@ export const noteProposals = pgTable(
     ),
   ],
 );
+
+/** Shared across serverless instances; no process-local authorization state. */
+export const workspaceMcpPolicy = pgTable("workspace_mcp_policy", {
+  tenantId: text("tenant_id").primaryKey(),
+  requireReview: boolean("require_review").notNull().default(false),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const noteCreateRequests = pgTable("note_create_requests", {
+  requestKey: text("request_key").primaryKey(),
+  requestHash: text("request_hash").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  // Retain identity after note deletion so a retry cannot recreate deleted content.
+  noteId: text("note_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const requestBudgets = pgTable("request_budgets", {
+  key: text("key").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull(),
+});
