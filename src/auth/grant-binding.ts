@@ -33,6 +33,7 @@ export function createGrantBindingExtension(): OAuthProviderExtension {
         scopes,
         referenceId,
         resources,
+        grantType,
       }) => {
         if (!scopes.includes(organizationScope)) return {};
         if (!user?.id || !referenceId)
@@ -45,16 +46,20 @@ export function createGrantBindingExtension(): OAuthProviderExtension {
           organizationId,
         );
         const resource = resources?.[0] ?? env.MCP_RESOURCE_URL;
-        const binding = await ensureGrantBinding({
-          userId: user.id,
-          oauthClientId: client.clientId,
-          organizationId,
-          resource,
-          scopes,
-        });
+        const binding = await ensureGrantBinding(
+          {
+            userId: user.id,
+            oauthClientId: client.clientId,
+            organizationId,
+            resource,
+            scopes,
+          },
+          grantType === "authorization_code",
+        );
 
         return {
           [tenantClaim]: binding.organizationId,
+          [`${env.TENANT_CLAIM_NAMESPACE}/grant_version`]: binding.tokenVersion,
           [tenantRoleClaim]: Array.isArray(membership.role)
             ? membership.role.join(" ")
             : (membership.role ?? "member"),

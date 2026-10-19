@@ -71,6 +71,29 @@ describe("auth session gate", () => {
     });
   });
 
+  test("a temporary session error stays on the page and offers a retry", async () => {
+    const assign = vi.fn();
+    const refetch = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    mockUseSession.mockReturnValue({
+      data: null,
+      isPending: false,
+      error: { message: "Gateway timeout" },
+      refetch,
+    });
+    render(
+      <AuthGate>
+        <div>App content</div>
+      </AuthGate>,
+    );
+    expect(screen.getByText("Gateway timeout")).toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Retry connection" }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
   test("authenticated user renders account identity", () => {
     mockUseSession.mockReturnValue({
       data: {

@@ -1,6 +1,8 @@
+import { requireActiveGrant } from "../repositories/oauth-grant-tenant-repository.js";
+import { getMcpPolicy } from "../repositories/connection-repository.js";
 import type { JWTPayload } from "jose";
 
-import { tenantClaim, tenantRoleClaim } from "../config/env.js";
+import { tenantClaim, tenantRoleClaim, env } from "../config/env.js";
 import type { AuthContext } from "../domain/auth-context.js";
 import { getCurrentMembership } from "../services/membership-service.js";
 import type { MembershipAdapter } from "../services/membership-service.js";
@@ -23,6 +25,20 @@ export async function buildAuthContext(
 
   const membership = await getCurrentMembership(adapter, userId, tenantId);
   const scopes = scope.split(" ").filter(Boolean);
+  const clientId = stringClaim(payload, "client_id");
+  if (!clientId)
+    throw new Error("Verified token is missing required NativeNotes claims");
+  await requireActiveGrant(
+    {
+      userId,
+      organizationId: tenantId,
+      oauthClientId: clientId,
+      resource: env.MCP_RESOURCE_URL,
+      scopes,
+    },
+    payload[`${env.TENANT_CLAIM_NAMESPACE}/grant_version`],
+  );
+  const policy = await getMcpPolicy(tenantId);
   const roles =
     role?.split(" ").filter(Boolean) ??
     (Array.isArray(membership.role)
@@ -34,6 +50,7 @@ export async function buildAuthContext(
     tenantId,
     scopes,
     roles,
+    requireReview: policy.requireReview,
     ...(stringClaim(payload, "client_id")
       ? { oauthClientId: stringClaim(payload, "client_id") }
       : {}),

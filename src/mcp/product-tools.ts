@@ -1,3 +1,4 @@
+import { outputSchemas, toolResult } from "./output-schemas.js";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { AuthContext } from "../domain/auth-context.js";
@@ -10,6 +11,7 @@ import {
 } from "../domain/product-inputs.js";
 import {
   getNote,
+  history,
   instructionChain,
   queryNoteMetadata,
 } from "../repositories/knowledge-repository.js";
@@ -25,9 +27,21 @@ export const mcpMutationDescriptions = {
   "note.proposeUpdate":
     "Propose replacement content for human review without changing the note. Supply the current expectedVersion, reason and source reference. Reuse an idempotencyKey for retries; changed payloads with the same key fail. Identical requests without a key are deduplicated. At most 20 pending proposals per note. Source is agent-provided, not independently verified. Review the diff in the NativeNotes web app; MCP cannot accept or reject proposals.",
   "note.create":
-    "Create a Markdown note in the authorized workspace Inbox. Returns its initial version. This writes persistent content.",
+    "Create a Markdown note in the authorized workspace Inbox. Supply an idempotencyKey and reuse it on retries to prevent duplicates; changed content with the same key fails. Without a key each call creates a note. This writes persistent content.",
   "note.update":
     "Replace title/body/optional summary. expectedVersion is required; a stale version fails without changing the note. Each save creates an immutable revision. Read the latest note and resolve conflicts explicitly; never silently retry with a newer version.",
+  "note.move":
+    "Move a note into a workspace folder, or Inbox with folderId null. Changes metadata only.",
+  "note.freshness":
+    "Set current, needs_review or superseded and clear prior verification. Changes metadata only.",
+  "note.confirm":
+    "Record that a note is still true at the current time. Does not change its content version.",
+  "note.restoreRevision":
+    "Restore a historical snapshot as a new content version. Requires the current expectedVersion; never overwrites silently.",
+  "tag.rename": "Rename a workspace tag. Does not edit note content.",
+  "tag.merge":
+    "Merge a tag into another workspace tag, preserving assignments and deleting the source tag.",
+  "tag.delete": "Delete a tag and its assignments. Does not delete notes.",
   "note.favorite":
     "Set a note's favorite flag. Changes metadata only; does not edit content or its version.",
   "note.archive":
@@ -59,6 +73,7 @@ export function requiredMutationScope(name: McpMutation) {
 }
 
 function hasMutationScope(context: AuthContext, name: McpMutation) {
+  if (context.requireReview && name !== "note.proposeUpdate") return false;
   return (
     context.scopes.includes(requiredMutationScope(name)) ||
     (name === "note.proposeUpdate" && context.scopes.includes("mcp:write"))
@@ -81,7 +96,7 @@ export async function executeMcpMutation(
 }
 export function registerProductTools(server: McpServer, context: AuthContext) {
   function read(
-    name: string,
+    name: keyof typeof outputSchemas,
     description: string,
     schema: z.ZodObject,
     handler: (input: unknown) => Promise<unknown>,
@@ -91,8 +106,10 @@ export function registerProductTools(server: McpServer, context: AuthContext) {
       {
         description: `Read-only. ${description} Tenant authority comes exclusively from the verified OAuth grant.`,
         inputSchema: schema,
+        outputSchema: outputSchemas[name],
         annotations: {
           readOnlyHint: true,
+          idempotentHint: true,
           destructiveHint: false,
           openWorldHint: false,
         },
@@ -102,9 +119,7 @@ export function registerProductTools(server: McpServer, context: AuthContext) {
           if (!context.scopes.includes("mcp:read"))
             throw new ForbiddenError("Requires mcp:read");
           const output = await handler(input);
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify(output) }],
-          };
+          return toolResult(outputSchemas[name], output);
         } catch (error) {
           return {
             isError: true,
@@ -145,9 +160,32 @@ export function registerProductTools(server: McpServer, context: AuthContext) {
   read(
     "note.get",
     "Read one note with folder, tags, summary, lifecycle, freshness and optimistic content version.",
-    z.object({ id: z.string().min(1) }),
+    z.object({ id: z.string().min(1).max(200) }),
     async (input: unknown) =>
       getNote(context.tenantId, z.object({ id: z.string() }).parse(input).id),
+  );
+  const historyInput = z.object({
+    id: z.string().min(1).max(200),
+    limit: z.number().int().min(1).max(50).default(20),
+    offset: z.number().int().min(0).max(100_000).default(0),
+  });
+  read(
+    "note.history",
+    "Read immutable content revisions and proposal/reviewer attribution. Returns up to 50 full snapshots per page; use limit/offset and nextOffset.",
+    historyInput,
+    async (input) => {
+      const { id, limit, offset } = historyInput.parse(input);
+      const rows = await history(context.tenantId, id, {
+        limit: limit + 1,
+        offset,
+      });
+      const hasMore = rows.length > limit;
+      return {
+        revisions: rows.slice(0, limit),
+        hasMore,
+        nextOffset: hasMore ? offset + limit : null,
+      };
+    },
   );
   read(
     "note.search",
@@ -188,29 +226,36 @@ export function registerProductTools(server: McpServer, context: AuthContext) {
       {
         description: `${mcpMutationDescriptions[name]} Tenant authority comes exclusively from the verified OAuth grant, never input.`,
         inputSchema: productCommands[name],
+        outputSchema: outputSchemas[name],
         annotations: {
           readOnlyHint: false,
+          // Metadata setters also advance timestamps, so only no-op-safe
+          // assignments and deduplicated proposals advertise retry idempotency.
+          idempotentHint: [
+            "tag.assign",
+            "tag.remove",
+            "tag.rename",
+            "note.proposeUpdate",
+          ].includes(name),
           destructiveHint: [
             "note.update",
             "note.archive",
             "note.trash",
             "instructions.set",
+            "note.restoreRevision",
+            "tag.delete",
+            "tag.merge",
+            "folder.update",
           ].includes(name),
           openWorldHint: false,
         },
       },
       async (input: unknown) => {
         try {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify(
-                  await executeMcpMutation(context, name, input),
-                ),
-              },
-            ],
-          };
+          return toolResult(
+            outputSchemas[name],
+            await executeMcpMutation(context, name, input),
+          );
         } catch (error) {
           return {
             isError: true,

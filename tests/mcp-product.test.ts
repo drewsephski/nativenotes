@@ -1,3 +1,4 @@
+import { outputSchemas, toolResult } from "../src/mcp/output-schemas.js";
 import { z } from "zod";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "../src/domain/auth-context.js";
@@ -94,6 +95,7 @@ describe("MCP product authorization", () => {
       "proposal.get",
       "proposal.list",
       "note.get",
+      "note.history",
       "note.search",
       "folder.list",
       "tag.list",
@@ -133,6 +135,54 @@ describe("MCP product authorization", () => {
     ).toBe(true);
     expect(writeRegister.mock.calls.map((c) => c[0])).toContain(
       "instructions.set",
+    );
+  });
+});
+
+describe("MCP contracts and review policy", () => {
+  it("omits direct mutation tools and rejects stale advertised calls under mandatory review", async () => {
+    const reviewed = {
+      ...context,
+      requireReview: true,
+      scopes: ["mcp:read", "mcp:write", "mcp:instructions"],
+    };
+    const server = new McpServer({ name: "review", version: "1" });
+    const register = vi.spyOn(server, "registerTool");
+    registerProductTools(server, reviewed);
+    const names = register.mock.calls.map(([name]) => name);
+    expect(names).toContain("note.proposeUpdate");
+    expect(names).not.toContain("note.move");
+    expect(names).not.toContain("instructions.set");
+    await expect(
+      executeMcpMutation(reviewed, "note.create", {}),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+  it("advertises validated structured output for every tool", () => {
+    const server = new McpServer({ name: "contracts", version: "1" });
+    const register = vi.spyOn(server, "registerTool");
+    registerProductTools(server, {
+      ...context,
+      scopes: ["mcp:read", "mcp:write", "mcp:instructions"],
+    });
+    for (const [, definition] of register.mock.calls)
+      expect(definition.outputSchema).toBeInstanceOf(z.ZodObject);
+    expect(register.mock.calls.map(([name]) => name)).toEqual(
+      expect.arrayContaining([
+        "note.move",
+        "note.history",
+        "tag.rename",
+        "note.restoreRevision",
+      ]),
+    );
+    const result = toolResult(outputSchemas["tag.create"], {
+      id: "tag",
+      name: "Tag",
+      normalizedName: "tag",
+      tenantId: "private",
+    });
+    expect(result.structuredContent).not.toHaveProperty("tenantId");
+    expect(JSON.parse(result.content[0]!.text)).toEqual(
+      result.structuredContent,
     );
   });
 });

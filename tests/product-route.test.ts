@@ -4,6 +4,17 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 const getSession = vi.fn();
 const findOne = vi.fn();
 const command = vi.fn();
+const revoke = vi.fn();
+const listConnections = vi.fn();
+const setPolicy = vi.fn();
+vi.mock("../src/repositories/oauth-grant-tenant-repository.js", () => ({
+  revokeClientGrants: revoke,
+}));
+vi.mock("../src/repositories/connection-repository.js", () => ({
+  listConnections,
+  getMcpPolicy: async () => ({ requireReview: false }),
+  setMcpPolicy: setPolicy,
+}));
 vi.mock("../src/auth/auth.js", () => ({
   auth: {
     api: { getSession },
@@ -21,10 +32,12 @@ async function request(
     command: "note.favorite",
     input: { id: "a", favorited: true },
   },
+  path = "commands",
+  method = "POST",
 ) {
   const req = Readable.from([JSON.stringify(body)]) as IncomingMessage;
-  req.method = "POST";
-  req.url = "/api/workspace/commands";
+  req.method = method;
+  req.url = `/api/workspace/${path}`;
   req.headers = {
     origin: new URL(env.BETTER_AUTH_URL).origin,
     "x-workspace-id": "org-a",
@@ -51,6 +64,8 @@ beforeEach(() => {
   });
   findOne.mockResolvedValue({ id: "membership" });
   command.mockResolvedValue({ ok: true });
+  listConnections.mockResolvedValue([]);
+  setPolicy.mockResolvedValue({ requireReview: true });
 });
 describe("workspace transport authority", () => {
   it("derives authority from session and membership, ignoring tenant input", async () => {
@@ -124,5 +139,47 @@ describe("workspace transport authority", () => {
       403,
     );
     expect(command).not.toHaveBeenCalled();
+  });
+});
+
+describe("connection controls", () => {
+  it("lists and revokes only the current user's grants in the verified workspace", async () => {
+    expect((await request({}, {}, "connections", "GET")).status).toBe(200);
+    expect(listConnections).toHaveBeenCalledWith("org-a", "user-a");
+    expect(
+      (
+        await request(
+          {},
+          {
+            input: { clientId: "client", userId: "foreign", tenantId: "org-b" },
+          },
+          "connections/revoke",
+        )
+      ).status,
+    ).toBe(200);
+    expect(revoke).toHaveBeenCalledWith("org-a", "user-a", "client");
+    expect(
+      (
+        await request(
+          { "x-workspace-id": "org-b" },
+          { input: { clientId: "client" } },
+          "connections/revoke",
+        )
+      ).status,
+    ).toBe(409);
+    expect(revoke).toHaveBeenCalledTimes(1);
+  });
+  it("requires current manager membership to change policy", async () => {
+    const data = { input: { requireReview: true }, canManagePolicy: true };
+    expect((await request({}, data, "mcp-policy")).status).toBe(403);
+    expect(setPolicy).not.toHaveBeenCalled();
+    findOne.mockResolvedValue({ id: "membership", role: "admin" });
+    expect((await request({}, data, "mcp-policy")).status).toBe(200);
+    expect(setPolicy).toHaveBeenCalledWith("org-a", true);
+    expect(
+      (await request({ origin: "https://evil.invalid" }, data, "mcp-policy"))
+        .status,
+    ).toBe(403);
+    expect(setPolicy).toHaveBeenCalledTimes(1);
   });
 });

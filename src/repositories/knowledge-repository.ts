@@ -1,3 +1,4 @@
+import { setTransactionTimeouts } from "../db/timeouts.js";
 import { randomUUID } from "node:crypto";
 import {
   and,
@@ -192,10 +193,14 @@ export async function setNoteMetadata(
   // Metadata never increments the content version or invalidates a content draft.
   return getNote(tenantId, id);
 }
-export async function history(tenantId: string, noteId: string) {
+export async function history(
+  tenantId: string,
+  noteId: string,
+  page?: { limit: number; offset: number },
+) {
   if (!(await noteRepository.findByTenantAndId(tenantId, noteId)))
     throw new NoteNotFoundError();
-  return db
+  const query = db
     .select({
       id: noteRevisions.id,
       version: noteRevisions.version,
@@ -229,6 +234,7 @@ export async function history(tenantId: string, noteId: string) {
       ),
     )
     .orderBy(desc(noteRevisions.version));
+  return page ? query.limit(page.limit).offset(page.offset) : query;
 }
 export async function restoreRevision(
   tenantId: string,
@@ -265,6 +271,7 @@ export async function instructionChain(
 ) {
   return db.transaction(
     async (tx) => {
+      await setTransactionTimeouts(tx);
       const allFolders = await tx
         .select()
         .from(folders)
@@ -317,6 +324,7 @@ export async function setInstructions(
   text: string,
 ) {
   return db.transaction(async (tx) => {
+    await setTransactionTimeouts(tx);
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`instructions:${tenantId}`}, 0))`,
     );

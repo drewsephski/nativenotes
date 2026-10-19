@@ -31,6 +31,21 @@ export function productError(error: unknown) {
       ? error.cause
       : error;
   if (cause && typeof cause === "object" && "code" in cause) {
+    if (
+      [
+        "57014",
+        "55P03",
+        "CONNECT_TIMEOUT",
+        "CONNECTION_CLOSED",
+        "CONNECTION_ENDED",
+      ].includes(String(cause.code))
+    )
+      return {
+        status: 503,
+        error: "temporarily_unavailable",
+        message:
+          "The database is busy. Check the result before retrying a write.",
+      };
     if (cause.code === "23505")
       return {
         status: 409,

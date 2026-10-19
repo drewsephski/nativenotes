@@ -12,11 +12,13 @@ import { createServer } from "node:http";
 import { env } from "./src/config/env.js";
 import { createNativeNotesRequestListener } from "./src/server/index.js";
 
-const server = createServer(createNativeNotesRequestListener());
+const server = createServer(
+  { requestTimeout: 30_000, headersTimeout: 15_000 },
+  createNativeNotesRequestListener(),
+);
 
 server.listen(Number(process.env.PORT ?? env.PORT), () => {
   const address = server.address();
-  const port =
-    address && typeof address === "object" ? address.port : env.PORT;
+  const port = address && typeof address === "object" ? address.port : env.PORT;
   console.log(`NativeNotes listening on port ${port}`);
 });
